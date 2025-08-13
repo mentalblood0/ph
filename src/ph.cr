@@ -12,12 +12,15 @@ module Ph
     end
 
     @[YAML::Field(converter: Ph::Env::PathToLogConverter)]
-    @log : File
+    getter log : File
+
+    getter sync : Bool
 
     @[YAML::Field(ignore: true)]
     @h : Hash(Bytes, Bytes) = Hash(Bytes, Bytes).new
 
     def after_initialize
+      @log.sync = @sync
       File.open @log.path do |f|
         loop do
           begin
@@ -47,7 +50,6 @@ module Ph
       v.copy_to r[2 + k.size + 2..]
 
       @log.write r
-      @log.fsync
       @h[k] = v
     end
 

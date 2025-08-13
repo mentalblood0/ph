@@ -2,7 +2,7 @@ require "spec"
 require "../src/ph.cr"
 
 describe Ph do
-  conf = File.read "config.yml"
+  conf = File.read "env.yml"
   env = Ph::Env.from_yaml conf
 
   k = "key".to_slice
