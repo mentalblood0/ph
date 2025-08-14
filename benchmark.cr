@@ -21,23 +21,31 @@ end
 
 height, width = getWinSize
 
-ph = Ph::Env.from_yaml File.read "env.yml"
+env_text = File.read "env.yml"
+ph = Ph::Env.from_yaml env_text
 
 conf_text = File.read "benchmark.yml"
 conf = NamedTuple(amount: UInt64, key_size: UInt16, value_size: UInt16).from_yaml conf_text
+bw = conf[:amount] * (2 + conf[:key_size] + 2 + conf[:value_size])
 
 puts "-" * width
 puts conf_text
 puts "-" * width
 
-tt = Time.measure do
+tw = Time.measure do
   conf[:amount].times { ph.set Random::DEFAULT.random_bytes(conf[:key_size]), Random::DEFAULT.random_bytes(conf[:value_size]) }
 end
+tr = Time.measure do
+  Ph::Env.from_yaml env_text
+end
 
-bw = conf[:amount] * (2 + conf[:key_size] + 2 + conf[:value_size])
+{"write"   => tw,
+ "recover" => tr}.each do |o, tt|
+  puts "#{o}:"
+  puts "\t#{(bw / tt.total_seconds).to_u64.humanize_bytes}/s"
+  puts "\t#{(conf[:amount] / tt.total_seconds).to_u64.humanize}r/s"
+  puts "\t#{tt.total_seconds.humanize}s passed"
+end
 
-puts "#{(bw / tt.total_seconds).to_u64.humanize_bytes}/s"
-puts "#{(conf[:amount] / tt.total_seconds).to_u64.humanize}r/s"
-puts "#{tt.total_seconds.humanize}s passed"
-puts "#{bw}B written"
+puts "#{bw}B (#{bw.humanize_bytes}) written"
 puts "-" * width
