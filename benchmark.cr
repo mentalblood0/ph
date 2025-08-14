@@ -38,9 +38,13 @@ end
 tr = Time.measure do
   Ph::Env.from_yaml env_text
 end
+tc = Time.measure do
+  ph.checkpoint
+end
 
-{"write"   => tw,
- "recover" => tr}.each do |o, tt|
+{"write"      => tw,
+ "recover"    => tr,
+ "checkpoint" => tc}.each do |o, tt|
   puts "#{o}:"
   puts "\t#{(bw / tt.total_seconds).to_u64.humanize_bytes}/s"
   puts "\t#{(conf[:amount] / tt.total_seconds).to_u64.humanize}r/s"
