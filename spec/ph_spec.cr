@@ -13,5 +13,6 @@ describe Ph do
     env = Ph::Env.from_yaml conf
     kv.each { |k, v| env.get(k).should eq v }
     env.checkpoint
+    kv.each { |k, v| env.get(k).should eq v }
   end
 end

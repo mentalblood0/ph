@@ -34,18 +34,19 @@ module Ph
     @[YAML::Field(ignore: true)]
     @h : Hash(Bytes, Bytes) = Hash(Bytes, Bytes).new
 
+    def decode(f : File)
+      rs = IO::ByteFormat::BigEndian.decode UInt16, f
+      r = Bytes.new rs
+      f.read r
+      r
+    end
+
     protected def read_log(&)
       File.open @log.path do |f|
         loop do
           begin
-            ks = IO::ByteFormat::BigEndian.decode UInt16, f
-            k = Bytes.new ks
-            f.read k
-
-            vs = IO::ByteFormat::BigEndian.decode UInt16, f
-            v = Bytes.new vs
-            f.read v
-
+            k = decode f
+            v = decode f
             yield({k, v})
           rescue IO::EOFError
             break
@@ -75,9 +76,9 @@ module Ph
     def checkpoint
       keys = @h.keys
       keys.sort!
+      posb = Bytes.new 8
       keys.each do |k|
-        posb = Bytes.new 8
-        IO::ByteFormat::BigEndian.encode @data.pos.to_u16!, posb
+        IO::ByteFormat::BigEndian.encode @data.pos.to_u64!, posb
         @sst.write posb
         @data.write record k, @h[k]
       end
@@ -90,8 +91,25 @@ module Ph
     end
 
     def get(k : Bytes)
-      rh = @h[k]?
-      return rh if rh
+      r = @h[k]?
+      return r if r
+
+      rs = 8_u64
+      @sst.pos = ((@sst.size / rs) / 2 * rs).to_u64!
+      step = @sst.pos / rs / 2
+      loop do
+        i = IO::ByteFormat::BigEndian.decode UInt64, @sst
+        @data.seek i
+        dk = decode @data
+        if k < dk
+          @sst.pos -= step.to_u64! * rs + rs
+        elsif k > dk
+          @sst.pos += step.to_u64! * rs - rs
+        else
+          return decode @data
+        end
+        step /= 2 if step > 2
+      end
     end
   end
 end
