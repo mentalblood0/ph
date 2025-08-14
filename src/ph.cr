@@ -5,22 +5,36 @@ module Ph
     include YAML::Serializable
     include YAML::Serializable::Strict
 
-    module PathToLogConverter
+    module PathToAppendFileConverter
       def self.from_yaml(ctx : YAML::ParseContext, node : YAML::Nodes::Node) : File
-        File.open String.new(ctx, node), "a+"
+        File.open String.new(ctx, node), "a"
       end
     end
 
-    @[YAML::Field(converter: Ph::Env::PathToLogConverter)]
-    getter log : File
+    module PathToReadWriteFileConverter
+      def self.from_yaml(ctx : YAML::ParseContext, node : YAML::Nodes::Node) : File
+        p = String.new ctx, node
+        begin
+          File.open p, "r+"
+        rescue File::NotFoundError
+          File.open p, "w+"
+        end
+      end
+    end
 
     getter sync : Bool
+
+    @[YAML::Field(converter: Ph::Env::PathToAppendFileConverter)]
+    getter log : File
+    @[YAML::Field(converter: Ph::Env::PathToReadWriteFileConverter)]
+    getter sst : File
+    @[YAML::Field(converter: Ph::Env::PathToReadWriteFileConverter)]
+    getter data : File
 
     @[YAML::Field(ignore: true)]
     @h : Hash(Bytes, Bytes) = Hash(Bytes, Bytes).new
 
-    def after_initialize
-      @log.sync = @sync
+    protected def read_log(&)
       File.open @log.path do |f|
         loop do
           begin
@@ -32,7 +46,7 @@ module Ph
             v = Bytes.new vs
             f.read v
 
-            @h[k] = v
+            yield({k, v})
           rescue IO::EOFError
             break
           end
@@ -40,7 +54,14 @@ module Ph
       end
     end
 
-    def set(k : Bytes, v : Bytes)
+    def after_initialize
+      @log.sync = @sync
+      @sst.sync = @sync
+      @data.sync = @sync
+      read_log { |k, v| @h[k] = v }
+    end
+
+    def record(k : Bytes, v : Bytes)
       r = Bytes.new (2 + k.size + 2 + v.size).to_u16
 
       IO::ByteFormat::BigEndian.encode k.size.to_u16!, r
@@ -48,13 +69,29 @@ module Ph
 
       IO::ByteFormat::BigEndian.encode v.size.to_u16!, r[2 + k.size..]
       v.copy_to r[2 + k.size + 2..]
+      r
+    end
 
-      @log.write r
+    def checkpoint
+      keys = @h.keys
+      keys.sort!
+      keys.each do |k|
+        posb = Bytes.new 8
+        IO::ByteFormat::BigEndian.encode @data.pos.to_u16!, posb
+        @sst.write posb
+        @data.write record k, @h[k]
+      end
+      @h.clear
+    end
+
+    def set(k : Bytes, v : Bytes)
+      @log.write record k, v
       @h[k] = v
     end
 
     def get(k : Bytes)
-      @h[k]?
+      rh = @h[k]?
+      return rh if rh
     end
   end
 end
