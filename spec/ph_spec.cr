@@ -14,5 +14,6 @@ describe Ph do
     kv.each { |k, v| env.get(k).should eq v }
     env.checkpoint
     kv.each { |k, v| env.get(k).should eq v }
+    env.get("nonexistent key".to_slice).should eq nil
   end
 end

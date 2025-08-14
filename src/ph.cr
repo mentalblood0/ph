@@ -95,20 +95,27 @@ module Ph
       return r if r
 
       rs = 8_u64
-      @sst.pos = ((@sst.size / rs) / 2 * rs).to_u64!
+      @sst.pos = ((@sst.size / rs) / 2 * rs).to_i64!
       step = @sst.pos / rs / 2
       loop do
         i = IO::ByteFormat::BigEndian.decode UInt64, @sst
         @data.seek i
         dk = decode @data
         if k < dk
-          @sst.pos -= step.to_u64! * rs + rs
+          return nil if step.abs == 1 && step > 0
+          step = -1 * step.abs
         elsif k > dk
-          @sst.pos += step.to_u64! * rs - rs
+          return nil if step.abs == 1 && step < 0
+          step = step.abs
         else
           return decode @data
         end
-        step /= 2 if step > 2
+        @sst.pos += step.to_i64! * rs - rs
+        if step.abs < 2
+          step /= step.abs
+        else
+          step /= 2
+        end
       end
     end
   end
