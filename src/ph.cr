@@ -1,6 +1,10 @@
 require "yaml"
 
 module Ph
+  alias K = Bytes
+  alias V = Bytes
+  alias KV = {K, V}
+
   class Env
     include YAML::Serializable
     include YAML::Serializable::Strict
@@ -79,12 +83,22 @@ module Ph
       @h.clear
     end
 
-    def set(k : Bytes, v : Bytes)
+    def set(kvs : Enumerable(KV))
       buf = IO::Memory.new
-      write buf, k
-      write buf, v
+      kvs.each do |k, v|
+        write buf, k
+        write buf, v
+      end
       @log.write buf.to_slice
-      @h[k] = v
+      kvs.each { |k, v| @h[k] = v }
+    end
+
+    def set(kv : KV)
+      set [kv]
+    end
+
+    def set(k : K, v : V)
+      set [{k, v}]
     end
 
     def get(k : Bytes)

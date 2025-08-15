@@ -9,7 +9,7 @@ describe Ph do
                          Random::DEFAULT.random_bytes(32)} }
 
   it "set/get" do
-    kv.each { |k, v| env.set k, v }
+    env.set kv
     env = Ph::Env.from_yaml conf
     kv.each { |k, v| env.get(k).should eq v }
     env.checkpoint
