@@ -71,14 +71,14 @@ module Ph
     end
 
     def checkpoint
-      keys = @h.keys
-      keys.sort!
+      kvs = @h.to_a
+      kvs.sort_by! { |k, _| k }
       idxb = IO::Memory.new
       datab = IO::Memory.new
-      keys.each do |k|
+      kvs.each do |k, v|
         IO::ByteFormat::BigEndian.encode datab.pos.to_u64!, idxb
         write datab, k
-        write datab, @h[k]
+        write datab, v
       end
       @data.write datab.to_slice
       @idx.write idxb.to_slice
