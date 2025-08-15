@@ -34,10 +34,9 @@ module Ph
     @[YAML::Field(ignore: true)]
     @h : Hash(Bytes, Bytes) = Hash(Bytes, Bytes).new
 
-    def decode(f : File)
-      rs = IO::ByteFormat::BigEndian.decode UInt16, f
-      r = Bytes.new rs
-      f.read r
+    def read(io : IO)
+      r = Bytes.new IO::ByteFormat::BigEndian.decode UInt16, io
+      io.read r
       r
     end
 
@@ -45,8 +44,8 @@ module Ph
       File.open @log.path do |f|
         loop do
           begin
-            k = decode f
-            v = decode f
+            k = read f
+            v = read f
             yield({k, v})
           rescue IO::EOFError
             break
@@ -62,15 +61,9 @@ module Ph
       read_log { |k, v| @h[k] = v }
     end
 
-    def record(k : Bytes, v : Bytes)
-      r = Bytes.new (2 + k.size + 2 + v.size).to_u16
-
-      IO::ByteFormat::BigEndian.encode k.size.to_u16!, r
-      k.copy_to r[2..]
-
-      IO::ByteFormat::BigEndian.encode v.size.to_u16!, r[2 + k.size..]
-      v.copy_to r[2 + k.size + 2..]
-      r
+    protected def write(io : IO, o : Bytes)
+      IO::ByteFormat::BigEndian.encode o.size.to_u16!, io
+      io.write o
     end
 
     def checkpoint
@@ -80,13 +73,15 @@ module Ph
       keys.each do |k|
         IO::ByteFormat::BigEndian.encode @data.pos.to_u64!, posb
         @sst.write posb
-        @data.write record k, @h[k]
+        write @data, k
+        write @data, @h[k]
       end
       @h.clear
     end
 
     def set(k : Bytes, v : Bytes)
-      @log.write record k, v
+      write @log, k
+      write @log, v
       @h[k] = v
     end
 
@@ -94,28 +89,28 @@ module Ph
       r = @h[k]?
       return r if r
 
-      rs = 8_u64
-      @sst.pos = ((@sst.size / rs) / 2 * rs).to_i64!
+      rs = 8_i64
+      @sst.pos = (@sst.size / rs).to_i64 / 2 * rs
       step = @sst.pos / rs / 2
       loop do
-        i = IO::ByteFormat::BigEndian.decode UInt64, @sst
-        @data.seek i
-        dk = decode @data
-        if k < dk
-          return nil if step.abs == 1 && step > 0
-          step = -1 * step.abs
-        elsif k > dk
-          return nil if step.abs == 1 && step < 0
-          step = step.abs
-        else
-          return decode @data
+        @data.seek IO::ByteFormat::BigEndian.decode UInt64, @sst
+
+        _c = k <=> read @data
+        return read @data if _c == 0
+
+        c = _c <= 0 ? _c < 0 ? -1 : 0 : 1
+        return nil if step.abs == 1 && c * step < 0
+
+        step = c * step.abs
+        if step.abs != 1
+          if step.abs < 2
+            step = step > 0 ? 1 : -1
+          else
+            step /= 2
+          end
         end
-        @sst.pos += step.to_i64! * rs - rs
-        if step.abs < 2
-          step /= step.abs
-        else
-          step /= 2
-        end
+
+        @sst.pos += step.to_i64 * rs - rs
       end
     end
   end
