@@ -72,6 +72,7 @@ module Ph
     end
 
     def checkpoint
+      logo = @log.pop
       @log << File.open filepath(@log.size, "log"), "a"
       @log.last.sync = true
 
@@ -95,6 +96,7 @@ module Ph
       idxc.write idxb.to_slice
       @idx << idxc
 
+      logo.delete
       @h.clear
     end
 
