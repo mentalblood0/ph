@@ -9,34 +9,16 @@ module Ph
     include YAML::Serializable
     include YAML::Serializable::Strict
 
-    module PathToAppendFileConverter
-      def self.from_yaml(ctx : YAML::ParseContext, node : YAML::Nodes::Node) : File
-        File.open String.new(ctx, node), "a"
-      end
-    end
-
-    module PathToReadWriteFileConverter
-      def self.from_yaml(ctx : YAML::ParseContext, node : YAML::Nodes::Node) : File
-        p = String.new ctx, node
-        begin
-          File.open p, "r+"
-        rescue File::NotFoundError
-          File.open p, "w+"
-        end
-      end
-    end
-
-    getter sync : Bool
-
-    @[YAML::Field(converter: Ph::Env::PathToAppendFileConverter)]
-    getter log : File
-    @[YAML::Field(converter: Ph::Env::PathToReadWriteFileConverter)]
-    getter idx : File
-    @[YAML::Field(converter: Ph::Env::PathToReadWriteFileConverter)]
-    getter data : File
+    getter path : String
 
     @[YAML::Field(ignore: true)]
-    @h : Hash(Bytes, Bytes) = Hash(Bytes, Bytes).new
+    getter log : Array(File) = [] of File
+    @[YAML::Field(ignore: true)]
+    getter idx : Array(File) = [] of File
+    @[YAML::Field(ignore: true)]
+    getter data : Array(File) = [] of File
+    @[YAML::Field(ignore: true)]
+    getter h : Hash(Bytes, Bytes) = Hash(Bytes, Bytes).new
 
     def read(io : IO)
       r = Bytes.new IO::ByteFormat::BigEndian.decode UInt16, io
@@ -45,23 +27,42 @@ module Ph
     end
 
     protected def read_log(&)
-      File.open @log.path do |f|
-        loop do
-          begin
-            k = read f
-            v = read f
-            yield({k, v})
-          rescue IO::EOFError
-            break
+      @log.each do |_f|
+        File.open _f.path do |f|
+          loop do
+            begin
+              k = read f
+              v = read f
+              yield({k, v})
+            rescue IO::EOFError
+              break
+            end
           end
         end
       end
     end
 
+    protected def filepath(i : Int32, type : String)
+      ib = Bytes.new 8
+      IO::ByteFormat::BigEndian.encode i.to_u64!, ib
+      "#{@path}/#{type}/#{ib.hexstring}.#{type}"
+    end
+
     def after_initialize
-      @log.sync = @sync
-      @idx.sync = @sync
-      @data.sync = @sync
+      Dir.mkdir_p "#{path}/log"
+      Dir.mkdir_p "#{path}/idx"
+      Dir.mkdir_p "#{path}/dat"
+
+      @log = Dir.glob("#{@path}/log/*.log").sort.map { |p| File.open p, "a" }
+      @log = [File.open filepath(0, "log"), "a"] if @log.empty?
+      @log.each { |f| f.sync = true }
+
+      @idx = Dir.glob("#{@path}/idx/*.idx").sort.map { |p| File.open p, "r+" }
+      @idx.each { |f| f.sync = true }
+
+      @data = Dir.glob("#{@path}/dat/*.dat").sort.map { |p| File.open p, "r+" }
+      @data.each { |f| f.sync = true }
+
       read_log { |k, v| @h[k] = v }
     end
 
@@ -71,6 +72,9 @@ module Ph
     end
 
     def checkpoint
+      @log << File.open filepath(@log.size, "log"), "a"
+      @log.last.sync = true
+
       kvs = @h.to_a
       kvs.sort_by! { |k, _| k }
       idxb = IO::Memory.new
@@ -80,8 +84,17 @@ module Ph
         write datab, k
         write datab, v
       end
-      @data.write datab.to_slice
-      @idx.write idxb.to_slice
+
+      datac = File.open filepath(@data.size, "dat"), "w+"
+      datac.sync = true
+      datac.write datab.to_slice
+      @data << datac
+
+      idxc = File.open filepath(@idx.size, "idx"), "w+"
+      idxc.sync = true
+      idxc.write idxb.to_slice
+      @idx << idxc
+
       @h.clear
     end
 
@@ -91,7 +104,7 @@ module Ph
         write buf, k
         write buf, v
       end
-      @log.write buf.to_slice
+      @log.last.write buf.to_slice
       kvs.each { |k, v| @h[k] = v }
     end
 
@@ -108,27 +121,36 @@ module Ph
       return r if r
 
       rs = 8_i64
-      @idx.pos = (@idx.size / rs).to_i64 / 2 * rs
-      step = @idx.pos / rs / 2
-      loop do
-        @data.seek IO::ByteFormat::BigEndian.decode UInt64, @idx
+      (@idx.size - 1).downto(0) do |i|
+        idxc = @idx[i]
+        datac = @data[i]
 
-        _c = k <=> read @data
-        return read @data if _c == 0
+        begin
+          idxc.pos = ((idxc.size / rs).to_i64 / 2).to_i64 * rs
+          step = Math.max(1_i64, idxc.pos / rs / 2)
+          loop do
+            datac.seek IO::ByteFormat::BigEndian.decode UInt64, idxc
 
-        c = _c <= 0 ? _c < 0 ? -1 : 0 : 1
-        return nil if step.abs == 1 && c * step < 0
+            _c = k <=> read datac
+            return read datac if _c == 0
 
-        step = c * step.abs
-        if step.abs != 1
-          if step.abs < 2
-            step = step > 0 ? 1 : -1
-          else
-            step /= 2
+            c = _c <= 0 ? _c < 0 ? -1 : 0 : 1
+            raise IO::EOFError.new if step.abs == 1 && c * step < 0
+
+            step = c * step.abs
+            if step.abs != 1
+              if step.abs < 2
+                step = step > 0 ? 1 : -1
+              else
+                step /= 2
+              end
+            end
+
+            idxc.pos += step.to_i64 * rs - rs
           end
+        rescue IO::EOFError
+          next
         end
-
-        @idx.pos += step.to_i64 * rs - rs
       end
     end
   end
