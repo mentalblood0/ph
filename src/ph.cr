@@ -31,7 +31,7 @@ module Ph
     @[YAML::Field(converter: Ph::Env::PathToAppendFileConverter)]
     getter log : File
     @[YAML::Field(converter: Ph::Env::PathToReadWriteFileConverter)]
-    getter sst : File
+    getter idx : File
     @[YAML::Field(converter: Ph::Env::PathToReadWriteFileConverter)]
     getter data : File
 
@@ -60,7 +60,7 @@ module Ph
 
     def after_initialize
       @log.sync = @sync
-      @sst.sync = @sync
+      @idx.sync = @sync
       @data.sync = @sync
       read_log { |k, v| @h[k] = v }
     end
@@ -73,13 +73,15 @@ module Ph
     def checkpoint
       keys = @h.keys
       keys.sort!
-      posb = Bytes.new 8
+      idxb = IO::Memory.new
+      datab = IO::Memory.new
       keys.each do |k|
-        IO::ByteFormat::BigEndian.encode @data.pos.to_u64!, posb
-        @sst.write posb
-        write @data, k
-        write @data, @h[k]
+        IO::ByteFormat::BigEndian.encode datab.pos.to_u64!, idxb
+        write datab, k
+        write datab, @h[k]
       end
+      @data.write datab.to_slice
+      @idx.write idxb.to_slice
       @h.clear
     end
 
@@ -106,10 +108,10 @@ module Ph
       return r if r
 
       rs = 8_i64
-      @sst.pos = (@sst.size / rs).to_i64 / 2 * rs
-      step = @sst.pos / rs / 2
+      @idx.pos = (@idx.size / rs).to_i64 / 2 * rs
+      step = @idx.pos / rs / 2
       loop do
-        @data.seek IO::ByteFormat::BigEndian.decode UInt64, @sst
+        @data.seek IO::ByteFormat::BigEndian.decode UInt64, @idx
 
         _c = k <=> read @data
         return read @data if _c == 0
@@ -126,7 +128,7 @@ module Ph
           end
         end
 
-        @sst.pos += step.to_i64 * rs - rs
+        @idx.pos += step.to_i64 * rs - rs
       end
     end
   end
