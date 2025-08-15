@@ -80,8 +80,10 @@ module Ph
     end
 
     def set(k : Bytes, v : Bytes)
-      write @log, k
-      write @log, v
+      buf = IO::Memory.new
+      write buf, k
+      write buf, v
+      @log.write buf.to_slice
       @h[k] = v
     end
 
