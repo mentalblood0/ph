@@ -43,17 +43,17 @@ end
 tc = Time.measure do
   ph.checkpoint
 end
-# ks = kv.keys
-# ks.shuffle!
-# ph.reset_stats
-# tg = Time.measure do
-#   ks.each { |k| ph.get k }
-# end
+ks = kv.keys
+ks.shuffle!
+ph.reset_stats
+tg = Time.measure do
+  ks.each { |k| ph.get k }
+end
 
 {"write"      => tw,
  "recover"    => tr,
  "checkpoint" => tc,
- # "get"        => tg,
+ "get"        => tg,
 }.each do |o, tt|
   puts "#{o}:"
   puts "\t#{(bw / tt.total_seconds).to_u64.humanize_bytes}/s"

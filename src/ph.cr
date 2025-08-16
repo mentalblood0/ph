@@ -177,8 +177,8 @@ module Ph
         datac = @data[i]
 
         begin
-          idxc.pos = ((idxc.size / POS_SIZE).to_i64 / 2).to_i64 * POS_SIZE
-          step = Math.max(1_i64, idxc.pos / POS_SIZE / 2)
+          idxc.pos = idxc.size / 2 // POS_SIZE * POS_SIZE
+          step = Math.max 1_i64, idxc.pos / POS_SIZE
           loop do
             raise IO::EOFError.new unless (idxc.read posb[2..]) == POS_SIZE
             datac.seek IO::ByteFormat::BigEndian.decode UInt64, posb
