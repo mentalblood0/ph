@@ -59,6 +59,8 @@ module Ph
     include YAML::Serializable
     include YAML::Serializable::Strict
 
+    POS_SIZE = 6_i64
+
     getter path : String
 
     @[YAML::Field(ignore: true)]
@@ -132,7 +134,7 @@ module Ph
       posb = Bytes.new 8
       kvs.each do |k, v|
         IO::ByteFormat::BigEndian.encode datab.pos.to_u64!, posb
-        idxb.write posb[2..]
+        idxb.write posb[8 - POS_SIZE..]
         Ph.write datab, k
         Ph.write datab, v
       end
@@ -154,8 +156,6 @@ module Ph
     def tx
       Tx.new self
     end
-
-    POS_SIZE = 6_i64
 
     getter stats : Hash(String, UInt64) = {"seeks_total" => 0_u64,
                                            "seeks_short" => 0_u64,
@@ -181,7 +181,7 @@ module Ph
           idxc.pos = idxc.size / 2 // POS_SIZE * POS_SIZE
           step = Math.max 1_i64, idxc.pos / POS_SIZE
           loop do
-            raise IO::EOFError.new unless (idxc.read_fully posb[2..]) == POS_SIZE
+            raise IO::EOFError.new unless (idxc.read_fully posb[8 - POS_SIZE..]) == POS_SIZE
             datac.seek IO::ByteFormat::BigEndian.decode UInt64, posb
 
             _c = k <=> (read datac).not_nil!
