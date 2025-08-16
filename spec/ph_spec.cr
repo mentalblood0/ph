@@ -1,12 +1,14 @@
 require "spec"
 require "../src/ph.cr"
 
+N = 1000
+
 describe Ph do
   conf = File.read "env.yml"
   env = Ph::Env.from_yaml conf
 
   kv = Hash(Bytes, Bytes).new
-  100.times { kv[Random::DEFAULT.random_bytes(16)] = Random::DEFAULT.random_bytes(32) }
+  N.times { kv[Random::DEFAULT.random_bytes(16)] = Random::DEFAULT.random_bytes(32) }
 
   it "set/get" do
     env.tx.set(kv).commit

@@ -38,7 +38,7 @@ tw = Time.measure do
   kv.each { |k, v| ph.tx.set(k, v).commit }
 end
 tr = Time.measure do
-  Ph::Env.from_yaml env_text
+  env = Ph::Env.from_yaml env_text
 end
 tc = Time.measure do
   ph.checkpoint

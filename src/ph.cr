@@ -74,7 +74,7 @@ module Ph
       rs = IO::ByteFormat::BigEndian.decode UInt16, io
       return nil if rs == UInt16::MAX
       r = Bytes.new rs
-      io.read r
+      io.read_fully r
       r
     end
 
@@ -181,7 +181,7 @@ module Ph
           idxc.pos = idxc.size / 2 // POS_SIZE * POS_SIZE
           step = Math.max 1_i64, idxc.pos / POS_SIZE
           loop do
-            raise IO::EOFError.new unless (idxc.read posb[2..]) == POS_SIZE
+            raise IO::EOFError.new unless (idxc.read_fully posb[2..]) == POS_SIZE
             datac.seek IO::ByteFormat::BigEndian.decode UInt64, posb
 
             _c = k <=> (read datac).not_nil!
