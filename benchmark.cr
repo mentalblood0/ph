@@ -43,24 +43,31 @@ end
 tc = Time.measure do
   ph.checkpoint
 end
-ks = kv.keys
-ks.shuffle!
-ph.reset_stats
-tg = Time.measure do
-  ks.each { |k| ph.get k }
-end
+# ks = kv.keys
+# ks.shuffle!
+# ph.reset_stats
+# tg = Time.measure do
+#   ks.each { |k| ph.get k }
+# end
 
 {"write"      => tw,
  "recover"    => tr,
  "checkpoint" => tc,
- "get"        => tg}.each do |o, tt|
+ # "get"        => tg,
+}.each do |o, tt|
   puts "#{o}:"
   puts "\t#{(bw / tt.total_seconds).to_u64.humanize_bytes}/s"
   puts "\t#{(conf[:amount] / tt.total_seconds).to_u64.humanize}r/s"
   puts "\t#{tt.total_seconds.humanize}s passed"
 end
 
-pp ph.stats
+ph.reset_stats
+ph.get kv.keys.sort.last
+puts({"last key search" => ph.stats}.to_yaml)
+
+ph.reset_stats
+ph.get kv.keys.sort.first
+puts({"first key search" => ph.stats}.to_yaml)
 
 puts "#{bw}B (#{bw.humanize_bytes}) written"
 puts "-" * width
