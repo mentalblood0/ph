@@ -159,7 +159,8 @@ module Ph
 
     getter stats : Hash(String, UInt64) = {"seeks_total" => 0_u64,
                                            "seeks_short" => 0_u64,
-                                           "seeks_long"  => 0_u64}
+                                           "seeks_long"  => 0_u64,
+                                           "reads"       => 0_u64}
 
     def reset_stats
       stats.keys.each { |k| stats[k] = 0_u64 }
@@ -184,6 +185,7 @@ module Ph
             datac.seek IO::ByteFormat::BigEndian.decode UInt64, posb
 
             _c = k <=> (read datac).not_nil!
+            @stats["reads"] += 1
             return read datac if _c == 0
 
             c = _c <= 0 ? _c < 0 ? -1 : 0 : 1
@@ -198,7 +200,7 @@ module Ph
               end
             end
 
-            posd = step.to_i64 * POS_SIZE - POS_SIZE
+            posd = step.round * POS_SIZE - POS_SIZE
             if posd != 0
               idxc.pos += posd
               @stats["seeks_total"] += 1
