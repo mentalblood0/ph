@@ -35,5 +35,13 @@ describe Ph do
     env.checkpoint
     kv.each { |k, v| env.get(k).should eq nil }
     env.get(kn).should eq nil
+
+    env.tx.delete(kv.keys.to_set).delete(kn).commit
+    kv.each { |k, v| env.get(k).should eq nil }
+    env.get(kn).should eq nil
+
+    env.checkpoint
+    kv.each { |k, v| env.get(k).should eq nil }
+    env.get(kn).should eq nil
   end
 end
