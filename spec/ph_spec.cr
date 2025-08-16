@@ -5,11 +5,11 @@ describe Ph do
   conf = File.read "env.yml"
   env = Ph::Env.from_yaml conf
 
-  kv = Array.new(100) { {Random::DEFAULT.random_bytes(16),
-                         Random::DEFAULT.random_bytes(32)} }
+  kv = Hash(Bytes, Bytes).new
+  100.times { kv[Random::DEFAULT.random_bytes(16)] = Random::DEFAULT.random_bytes(32) }
 
   it "set/get" do
-    env.set kv
+    env.tx.set(kv).commit
     kv.each { |k, v| env.get(k).should eq v }
 
     env = Ph::Env.from_yaml conf
@@ -18,11 +18,22 @@ describe Ph do
     env.checkpoint
     kv.each { |k, v| env.get(k).should eq v }
 
-    env.set "key".to_slice, "value".to_slice
+    kn = "key".to_slice
+    vn = "key".to_slice
+
+    env.tx.set(kn, vn).commit
     env.checkpoint
     kv.each { |k, v| env.get(k).should eq v }
-    env.get("key".to_slice).should eq "value".to_slice
+    env.get(kn).should eq vn
 
     env.get("nonexistent key".to_slice).should eq nil
+
+    env.tx.delete(kv.keys.to_set).delete(kn).commit
+    kv.each { |k, v| env.get(k).should eq nil }
+    env.get(kn).should eq nil
+
+    env.checkpoint
+    kv.each { |k, v| env.get(k).should eq nil }
+    env.get(kn).should eq nil
   end
 end

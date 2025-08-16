@@ -5,6 +5,57 @@ module Ph
   alias V = Bytes
   alias KV = {K, V}
 
+  def self.write(io : IO, o : Bytes)
+    IO::ByteFormat::BigEndian.encode o.size.to_u16!, io
+    io.write o
+  end
+
+  class Tx
+    getter buf : IO::Memory = IO::Memory.new
+    getter set : Hash(Bytes, Bytes) = Hash(Bytes, Bytes).new
+    getter del : Set(Bytes) = Set(Bytes).new
+
+    protected def initialize(@env : Env)
+    end
+
+    def set(kvs : Hash(K, V))
+      kvs.each do |k, v|
+        Ph.write @buf, k
+        Ph.write @buf, v
+      end
+      @set.merge! kvs
+      self
+    end
+
+    def set(kv : KV)
+      set({kv[0] => kv[1]})
+    end
+
+    def set(k : K, v : V)
+      set({k => v})
+    end
+
+    def delete(ks : Enumerable(K))
+      ks.each do |k|
+        Ph.write @buf, k
+        IO::ByteFormat::BigEndian.encode UInt16::MAX, @buf
+      end
+      ks.each { |k| @del << k }
+      self
+    end
+
+    def delete(k : K)
+      delete [k]
+    end
+
+    def commit
+      @env.log.last.write @buf.to_slice
+      @env.h.merge! @set
+      @del.each { |k| @env.h.delete k }
+      @env.d.concat @del
+    end
+  end
+
   class Env
     include YAML::Serializable
     include YAML::Serializable::Strict
@@ -19,6 +70,8 @@ module Ph
     getter data : Array(File) = [] of File
     @[YAML::Field(ignore: true)]
     getter h : Hash(Bytes, Bytes) = Hash(Bytes, Bytes).new
+    @[YAML::Field(ignore: true)]
+    getter d : Set(Bytes) = Set(Bytes).new
 
     def read(io : IO)
       r = Bytes.new IO::ByteFormat::BigEndian.decode UInt16, io
@@ -27,12 +80,22 @@ module Ph
     end
 
     protected def read_log(&)
+      deleted = Set(Bytes).new
       @log.each do |_f|
         File.open _f.path do |f|
           loop do
             begin
               k = read f
-              v = read f
+              next if deleted.includes? k
+
+              vs = IO::ByteFormat::BigEndian.decode UInt16, f
+              if vs == UInt16::MAX
+                deleted << k
+                next
+              end
+
+              v = Bytes.new vs
+              f.read v
               yield({k, v})
             rescue IO::EOFError
               break
@@ -66,11 +129,6 @@ module Ph
       read_log { |k, v| @h[k] = v }
     end
 
-    protected def write(io : IO, o : Bytes)
-      IO::ByteFormat::BigEndian.encode o.size.to_u16!, io
-      io.write o
-    end
-
     def checkpoint
       logo = @log.pop
       @log << File.open filepath(@log.size, "log"), "a"
@@ -82,8 +140,8 @@ module Ph
       datab = IO::Memory.new
       kvs.each do |k, v|
         IO::ByteFormat::BigEndian.encode datab.pos.to_u64!, idxb
-        write datab, k
-        write datab, v
+        Ph.write datab, k
+        Ph.write datab, v
       end
 
       datac = File.open filepath(@data.size, "dat"), "w+"
@@ -100,27 +158,15 @@ module Ph
       @h.clear
     end
 
-    def set(kvs : Enumerable(KV))
-      buf = IO::Memory.new
-      kvs.each do |k, v|
-        write buf, k
-        write buf, v
-      end
-      @log.last.write buf.to_slice
-      kvs.each { |k, v| @h[k] = v }
-    end
-
-    def set(kv : KV)
-      set [kv]
-    end
-
-    def set(k : K, v : V)
-      set [{k, v}]
+    def tx
+      Tx.new self
     end
 
     def get(k : Bytes)
       r = @h[k]?
       return r if r
+
+      return nil if @d.includes? k
 
       rs = 8_i64
       (@idx.size - 1).downto(0) do |i|

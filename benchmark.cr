@@ -33,7 +33,7 @@ puts conf_text
 puts "-" * width
 
 tw = Time.measure do
-  conf[:amount].times { ph.set Random::DEFAULT.random_bytes(conf[:key_size]), Random::DEFAULT.random_bytes(conf[:value_size]) }
+  conf[:amount].times { ph.tx.set(Random::DEFAULT.random_bytes(conf[:key_size]), Random::DEFAULT.random_bytes(conf[:value_size])).commit }
 end
 tr = Time.measure do
   Ph::Env.from_yaml env_text
