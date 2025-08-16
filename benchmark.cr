@@ -32,8 +32,10 @@ puts "-" * width
 puts conf_text
 puts "-" * width
 
+kv = Hash(Bytes, Bytes).new
+conf[:amount].times { kv[Random::DEFAULT.random_bytes(16)] = Random::DEFAULT.random_bytes(32) }
 tw = Time.measure do
-  conf[:amount].times { ph.tx.set(Random::DEFAULT.random_bytes(conf[:key_size]), Random::DEFAULT.random_bytes(conf[:value_size])).commit }
+  kv.each { |k, v| ph.tx.set(k, v).commit }
 end
 tr = Time.measure do
   Ph::Env.from_yaml env_text
@@ -41,15 +43,24 @@ end
 tc = Time.measure do
   ph.checkpoint
 end
+ks = kv.keys
+ks.shuffle!
+ph.seeks_number = 0_u64
+tg = Time.measure do
+  ks.each { |k| ph.get k }
+end
 
 {"write"      => tw,
  "recover"    => tr,
- "checkpoint" => tc}.each do |o, tt|
+ "checkpoint" => tc,
+ "get"        => tg}.each do |o, tt|
   puts "#{o}:"
   puts "\t#{(bw / tt.total_seconds).to_u64.humanize_bytes}/s"
   puts "\t#{(conf[:amount] / tt.total_seconds).to_u64.humanize}r/s"
   puts "\t#{tt.total_seconds.humanize}s passed"
 end
+
+puts "seeks per key: #{(ph.seeks_number / kv.size).humanize}"
 
 puts "#{bw}B (#{bw.humanize_bytes}) written"
 puts "-" * width

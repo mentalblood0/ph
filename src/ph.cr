@@ -157,6 +157,8 @@ module Ph
 
     POS_SIZE = 6_i64
 
+    property seeks_number : UInt64 = 0
+
     def get(k : Bytes)
       begin
         return @h[k]
@@ -190,7 +192,11 @@ module Ph
               end
             end
 
-            idxc.pos += step.to_i64 * POS_SIZE - POS_SIZE
+            posd = step.to_i64 * POS_SIZE - POS_SIZE
+            if posd != 0
+              idxc.pos += posd
+              @seeks_number += 1
+            end
           end
         rescue IO::EOFError
           next
