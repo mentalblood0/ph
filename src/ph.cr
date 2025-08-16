@@ -129,8 +129,10 @@ module Ph
       kvs.sort_by! { |k, _| k }
       idxb = IO::Memory.new
       datab = IO::Memory.new
+      posb = Bytes.new 8
       kvs.each do |k, v|
-        IO::ByteFormat::BigEndian.encode datab.pos.to_u64!, idxb
+        IO::ByteFormat::BigEndian.encode datab.pos.to_u64!, posb
+        idxb.write posb[2..]
         Ph.write datab, k
         Ph.write datab, v
       end
@@ -153,22 +155,25 @@ module Ph
       Tx.new self
     end
 
+    POS_SIZE = 6_i64
+
     def get(k : Bytes)
       begin
         return @h[k]
       rescue KeyError
       end
 
-      rs = 8_i64
+      posb = Bytes.new 8
       (@idx.size - 1).downto(0) do |i|
         idxc = @idx[i]
         datac = @data[i]
 
         begin
-          idxc.pos = ((idxc.size / rs).to_i64 / 2).to_i64 * rs
-          step = Math.max(1_i64, idxc.pos / rs / 2)
+          idxc.pos = ((idxc.size / POS_SIZE).to_i64 / 2).to_i64 * POS_SIZE
+          step = Math.max(1_i64, idxc.pos / POS_SIZE / 2)
           loop do
-            datac.seek IO::ByteFormat::BigEndian.decode UInt64, idxc
+            raise IO::EOFError.new unless (idxc.read posb[2..]) == POS_SIZE
+            datac.seek IO::ByteFormat::BigEndian.decode UInt64, posb
 
             _c = k <=> (read datac).not_nil!
             return read datac if _c == 0
@@ -185,7 +190,7 @@ module Ph
               end
             end
 
-            idxc.pos += step.to_i64 * rs - rs
+            idxc.pos += step.to_i64 * POS_SIZE - POS_SIZE
           end
         rescue IO::EOFError
           next
