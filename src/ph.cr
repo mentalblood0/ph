@@ -157,7 +157,13 @@ module Ph
 
     POS_SIZE = 6_i64
 
-    property seeks_number : UInt64 = 0
+    getter stats : Hash(String, UInt64) = {"seeks_total" => 0_u64,
+                                           "seeks_short" => 0_u64,
+                                           "seeks_long"  => 0_u64}
+
+    def reset_stats
+      stats.keys.each { |k| stats[k] = 0_u64 }
+    end
 
     def get(k : Bytes)
       begin
@@ -195,7 +201,12 @@ module Ph
             posd = step.to_i64 * POS_SIZE - POS_SIZE
             if posd != 0
               idxc.pos += posd
-              @seeks_number += 1
+              @stats["seeks_total"] += 1
+              if step.to_i64.abs == 1
+                @stats["seeks_short"] += 1
+              else
+                @stats["seeks_long"] += 1
+              end
             end
           end
         rescue IO::EOFError

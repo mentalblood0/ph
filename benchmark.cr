@@ -45,7 +45,7 @@ tc = Time.measure do
 end
 ks = kv.keys
 ks.shuffle!
-ph.seeks_number = 0_u64
+ph.reset_stats
 tg = Time.measure do
   ks.each { |k| ph.get k }
 end
@@ -60,7 +60,7 @@ end
   puts "\t#{tt.total_seconds.humanize}s passed"
 end
 
-puts "seeks per key: #{(ph.seeks_number / kv.size).humanize}"
+pp ph.stats
 
 puts "#{bw}B (#{bw.humanize_bytes}) written"
 puts "-" * width
