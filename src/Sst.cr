@@ -48,14 +48,35 @@ module Ph
       @idx << idxc
     end
 
-    getter stats : Hash(String, UInt64) = {"seeks_total" => 0_u64,
-                                           "seeks_short" => 0_u64,
-                                           "seeks_long"  => 0_u64,
-                                           "reads"       => 0_u64}
+    class Stats
+      include YAML::Serializable
+      include YAML::Serializable::Strict
 
-    def reset_stats
-      stats.keys.each { |k| stats[k] = 0_u64 }
+      getter seeks_short : UInt64 = 0_u64
+      getter seeks_long : UInt64 = 0_u64
+      getter seeks_total : UInt64 { seeks_short + seeks_long }
+      property reads : UInt64 = 0_u64
+
+      def initialize
+      end
+
+      def add_seek(posd : Int64)
+        if posd.abs == POS_SIZE
+          @seeks_short += 1
+        else
+          @seeks_long += 1
+        end
+      end
+
+      def reset
+        @seeks_short = 0_u64
+        @seeks_long = 0_u64
+        @reads = 0_u64
+      end
     end
+
+    @[YAML::Field(ignore: true)]
+    getter stats : Stats = Stats.new
 
     def get(k : Bytes)
       posb = Bytes.new 8
@@ -71,7 +92,7 @@ module Ph
             datac.seek IO::ByteFormat::BigEndian.decode UInt64, posb
 
             _c = k <=> (Ph.read datac).not_nil!
-            @stats["reads"] += 1
+            @stats.reads += 1
             return Ph.read datac if _c == 0
 
             c = _c <= 0 ? _c < 0 ? -1 : 0 : 1
@@ -86,15 +107,10 @@ module Ph
               end
             end
 
-            posd = step.round * POS_SIZE - POS_SIZE
+            posd = (step.round * POS_SIZE - POS_SIZE).to_i64!
             if posd != 0
               idxc.pos += posd
-              @stats["seeks_total"] += 1
-              if step.to_i64.abs == 1
-                @stats["seeks_short"] += 1
-              else
-                @stats["seeks_long"] += 1
-              end
+              @stats.add_seek posd
             end
           end
         rescue IO::EOFError
