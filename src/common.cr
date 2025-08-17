@@ -9,8 +9,12 @@ module Ph
     if size
       IO::ByteFormat::BigEndian.encode size, io
     else
-      IO::ByteFormat::BigEndian.encode UInt16.MAX, io
+      IO::ByteFormat::BigEndian.encode UInt16::MAX, io
     end
+  end
+
+  def self.read_size(io : IO)
+    IO::ByteFormat::BigEndian.decode UInt16, io
   end
 
   def self.write(io : IO, o : Bytes?)
@@ -22,8 +26,13 @@ module Ph
     end
   end
 
+  def self.write(io : IO, k : Bytes, v : Bytes?)
+    write io, k
+    write io, v
+  end
+
   def self.read(io : IO)
-    rs = IO::ByteFormat::BigEndian.decode UInt16, io
+    rs = read_size io
     return nil if rs == UInt16::MAX
     r = Bytes.new rs
     io.read_fully r
@@ -33,7 +42,7 @@ module Ph
   def self.write_pos(io : IO, pos : UInt64)
     posb = Bytes.new 8
     IO::ByteFormat::BigEndian.encode pos, posb
-    idxb.write posb[8 - POS_SIZE..]
+    io.write posb[8 - POS_SIZE..]
   end
 
   def self.read_pos(io : IO)

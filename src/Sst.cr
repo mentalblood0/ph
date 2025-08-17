@@ -21,63 +21,99 @@ module Ph
       @idx.each { |f| f.sync = true }
 
       @data = Dir.glob("#{@path}/*.dat").sort.map { |p| File.open p, "r+" }
+      @data = [File.open Ph.filepath(@path, 0, "dat"), "w+"] if @data.empty?
       @data.each { |f| f.sync = true }
     end
 
     def write(h : Hash(Bytes, Bytes?))
-      kvs = h.to_a
-      kvs.sort_by! { |k, _| k }
-      idxb = IO::Memory.new
-      datab = IO::Memory.new
-
-      # --------------------------------------------------------
-
-      free = Array(NamedTuple(pos: UInt64, size: UInt16)).new
+      free = Hash(UInt16, Array(UInt64)).new
       begin
         File.open("#{@path}/free") do |freef|
           pos = Ph.read_pos freef
-          size = IO::ByteFormat::BigEndian.decode UInt16, freef
-          free << {pos: pos, size: size}
+          size = Ph.read_size freef
+          free[size] = Array(UInt64).new unless free[size]?
+          free[size] << pos
         end
       rescue File::NotFoundError
       end
 
       undof = File.open "#{@path}/undo", "w"
+      undof.sync = true
 
       dataf = @data.last
-      Ph.writes dataf.size.to_u64, undof
+
+      ds = dataf.size.to_u64
+      Ph.write_pos undof, ds
+
       dataf.rewind
       loop do
         begin
           k = Ph.read dataf
-          vs = IO::ByteFormat::BigEndian.decode UInt16, dataf
+          size = Ph.read_size dataf
 
-          if (vs != UInt16.MAX) && (h[k] == nil rescue false)
+          if (size != UInt16::MAX) && (h[k] == nil rescue false)
             pos = dataf.pos.to_u64!
-            free << {pos: pos, size: vs}
+            free[size] = Array(UInt64).new unless free[size]?
+            free[size] << pos
+
             dataf.pos -= 2
-            Ph.write_size undof, 2_u16
+
+            undob = IO::Memory.new
+            Ph.write_pos undob, dataf.pos.to_u64!
+            Ph.write_size undob, 2_u16
+            Ph.write_size undob, size
+            undof.write undob.to_slice
+
             Ph.write_size dataf, nil
+            h.delete k
           end
 
-          dataf.skip vs
+          dataf.skip size
         rescue IO::EOFError
           break
         end
       end
 
-      # /-------------------------------------------------------
+      idxb = IO::Memory.new
+      datab = IO::Memory.new
+      freekvs = free.to_a
+      freekvs.sort_by! { |k, _| k }
+      h.each do |hk, hv|
+        ow = false
+        freekvs.each do |size, poses|
+          next if poses.empty?
+          rs = (2 + hk.size + 2 + hv.not_nil!.size).to_u16!
+          next unless size >= rs
+          dataf.pos = poses.pop
 
-      kvs.each do |k, v|
-        Ph.write_pos idxb, datab.pos.to_u64!, POS_SIZE
-        Ph.write datab, k
-        Ph.write datab, v
+          undob = IO::Memory.new
+          Ph.write_pos undob, dataf.pos.to_u64!
+          Ph.write_size undob, rs
+          Ph.write undob, hk, hv
+          undof.write undob.to_slice
+
+          Ph.write_pos idxb, dataf.pos.to_u64!
+          Ph.write dataf, hk, hv
+          ow = true
+        end
+        Ph.write_pos idxb, ds + datab.pos.to_u64!
+        Ph.write datab, hk, hv unless ow
       end
+      dataf.seek 0, IO::Seek::End
+      dataf.write datab.to_slice
 
-      datac = File.open Ph.filepath(@path, @data.size, "dat"), "w+"
-      datac.sync = true
-      datac.write datab.to_slice
-      @data << datac
+      undof.close
+
+      freeb = IO::Memory.new
+      freekvs.each do |size, poses|
+        poses.each do |pos|
+          Ph.write_pos freeb, pos
+          Ph.write_size freeb, size
+        end
+      end
+      File.write "#{@path}/free", freeb unless freeb.empty?
+
+      undof.delete
 
       idxc = File.open Ph.filepath(@path, @idx.size, "idx"), "w+"
       idxc.sync = true
@@ -116,6 +152,7 @@ module Ph
     getter stats : Stats = Stats.new
 
     def get(k : Bytes)
+      puts "get #{k.hexstring}"
       (@idx.size - 1).downto(0) do |i|
         idxc = @idx[i]
         dataf = @data.last
@@ -126,7 +163,9 @@ module Ph
           loop do
             dataf.seek Ph.read_pos idxc
 
-            _c = k <=> (Ph.read dataf).not_nil!
+            dk = (Ph.read dataf).not_nil!
+            puts "dk = #{dk.hexstring}"
+            _c = k <=> dk
             @stats.reads += 1
             return Ph.read dataf if _c == 0
 
