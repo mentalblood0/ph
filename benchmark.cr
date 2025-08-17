@@ -45,7 +45,7 @@ tc = Time.measure do
 end
 ks = kv.keys
 ks.shuffle!
-ph.reset_stats
+ph.sst.reset_stats
 tg = Time.measure do
   ks.each { |k| ph.get k }
 end
@@ -61,13 +61,13 @@ end
   puts "\t#{tt.total_seconds.humanize}s passed"
 end
 
-ph.reset_stats
+ph.sst.reset_stats
 ph.get kv.keys.sort.last
-puts({"last key search" => ph.stats}.to_yaml)
+puts({"last key search" => ph.sst.stats}.to_yaml)
 
-ph.reset_stats
+ph.sst.reset_stats
 ph.get kv.keys.sort.first
-puts({"first key search" => ph.stats}.to_yaml)
+puts({"first key search" => ph.sst.stats}.to_yaml)
 
 puts "#{bw}B (#{bw.humanize_bytes}) written"
 puts "-" * width
