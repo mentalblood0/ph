@@ -23,6 +23,6 @@ module Ph
   def self.filepath(root : String, i : Int32, type : String)
     ib = Bytes.new 8
     IO::ByteFormat::BigEndian.encode i.to_u64!, ib
-    "#{root}/#{type}/#{ib.hexstring}.#{type}"
+    "#{root}/#{ib.hexstring}.#{type}"
   end
 end

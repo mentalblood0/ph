@@ -1,6 +1,7 @@
 require "yaml"
 
 require "./common.cr"
+require "./Log.cr"
 require "./Sst.cr"
 
 module Ph
@@ -39,7 +40,7 @@ module Ph
         Ph.write buf, v
       end
       return if buf.empty?
-      @env.log.last.write buf.to_slice
+      @env.log.write buf.to_slice
 
       @env.h.merge! @set
     end
@@ -49,50 +50,21 @@ module Ph
     include YAML::Serializable
     include YAML::Serializable::Strict
 
-    getter path : String
+    getter log : Log
     getter sst : Sst
 
     @[YAML::Field(ignore: true)]
-    getter log : Array(File) = [] of File
-    @[YAML::Field(ignore: true)]
     getter h : Hash(Bytes, Bytes?) = Hash(Bytes, Bytes?).new
 
-    protected def read_log(&)
-      @log.each do |_f|
-        File.open _f.path do |f|
-          loop do
-            begin
-              k = (Ph.read f).not_nil!
-              v = Ph.read f
-              yield({k, v})
-            rescue IO::EOFError
-              break
-            end
-          end
-        end
-      end
-    end
-
     def after_initialize
-      Dir.mkdir_p "#{path}/log"
-
-      @log = Dir.glob("#{@path}/log/*.log").sort.map { |p| File.open p, "a" }
-      @log = [File.open Ph.filepath(@path, 0, "log"), "a"] if @log.empty?
-      @log.each { |f| f.sync = true }
-
-      read_log { |k, v| @h[k] = v }
+      @log.read { |k, v| @h[k] = v }
     end
 
     def checkpoint
       return if @h.empty?
 
-      logo = @log.pop
-      @log << File.open Ph.filepath(@path, @log.size, "log"), "a"
-      @log.last.sync = true
-
-      @sst.checkpoint @h
-
-      logo.delete
+      @sst.write @h
+      @log.rotate
       @h.clear
     end
 

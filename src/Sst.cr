@@ -15,17 +15,16 @@ module Ph
     getter data : Array(File) = [] of File
 
     def after_initialize
-      Dir.mkdir_p "#{path}/idx"
-      Dir.mkdir_p "#{path}/dat"
+      Dir.mkdir_p @path
 
-      @idx = Dir.glob("#{@path}/idx/*.idx").sort.map { |p| File.open p, "r+" }
+      @idx = Dir.glob("#{@path}/*.idx").sort.map { |p| File.open p, "r+" }
       @idx.each { |f| f.sync = true }
 
-      @data = Dir.glob("#{@path}/dat/*.dat").sort.map { |p| File.open p, "r+" }
+      @data = Dir.glob("#{@path}/*.dat").sort.map { |p| File.open p, "r+" }
       @data.each { |f| f.sync = true }
     end
 
-    def checkpoint(h : Hash(Bytes, Bytes?))
+    def write(h : Hash(Bytes, Bytes?))
       kvs = h.to_a
       kvs.sort_by! { |k, _| k }
       idxb = IO::Memory.new
