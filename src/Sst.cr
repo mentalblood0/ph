@@ -29,10 +29,47 @@ module Ph
       kvs.sort_by! { |k, _| k }
       idxb = IO::Memory.new
       datab = IO::Memory.new
-      posb = Bytes.new 8
+
+      # --------------------------------------------------------
+
+      free = Array(NamedTuple(pos: UInt64, size: UInt16)).new
+      begin
+        File.open("#{@path}/free") do |freef|
+          pos = Ph.read_pos freef
+          size = IO::ByteFormat::BigEndian.decode UInt16, freef
+          free << {pos: pos, size: size}
+        end
+      rescue File::NotFoundError
+      end
+
+      undof = File.open "#{@path}/undo", "w"
+
+      dataf = @data.last
+      Ph.writes dataf.size.to_u64, undof
+      dataf.rewind
+      loop do
+        begin
+          k = Ph.read dataf
+          vs = IO::ByteFormat::BigEndian.decode UInt16, dataf
+
+          if (vs != UInt16.MAX) && (h[k] == nil rescue false)
+            pos = dataf.pos.to_u64!
+            free << {pos: pos, size: vs}
+            dataf.pos -= 2
+            Ph.write_size undof, 2_u16
+            Ph.write_size dataf, nil
+          end
+
+          dataf.skip vs
+        rescue IO::EOFError
+          break
+        end
+      end
+
+      # /-------------------------------------------------------
+
       kvs.each do |k, v|
-        IO::ByteFormat::BigEndian.encode datab.pos.to_u64!, posb
-        idxb.write posb[8 - POS_SIZE..]
+        Ph.write_pos idxb, datab.pos.to_u64!, POS_SIZE
         Ph.write datab, k
         Ph.write datab, v
       end
@@ -79,21 +116,19 @@ module Ph
     getter stats : Stats = Stats.new
 
     def get(k : Bytes)
-      posb = Bytes.new 8
       (@idx.size - 1).downto(0) do |i|
         idxc = @idx[i]
-        datac = @data[i]
+        dataf = @data.last
 
         begin
           idxc.pos = idxc.size / 2 // POS_SIZE * POS_SIZE
           step = Math.max 1_i64, idxc.pos / POS_SIZE
           loop do
-            raise IO::EOFError.new unless (idxc.read_fully posb[8 - POS_SIZE..]) == POS_SIZE
-            datac.seek IO::ByteFormat::BigEndian.decode UInt64, posb
+            dataf.seek Ph.read_pos idxc
 
-            _c = k <=> (Ph.read datac).not_nil!
+            _c = k <=> (Ph.read dataf).not_nil!
             @stats.reads += 1
-            return Ph.read datac if _c == 0
+            return Ph.read dataf if _c == 0
 
             c = _c <= 0 ? _c < 0 ? -1 : 0 : 1
             raise IO::EOFError.new if step.abs == 1 && c * step < 0
