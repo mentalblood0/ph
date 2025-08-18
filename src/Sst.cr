@@ -152,40 +152,28 @@ module Ph
     getter stats : Stats = Stats.new
 
     def get(k : Bytes)
-      puts "get #{k.hexstring}"
       (@idx.size - 1).downto(0) do |i|
         idxc = @idx[i]
         dataf = @data.last
 
         begin
-          idxc.pos = idxc.size / 2 // POS_SIZE * POS_SIZE
-          step = Math.max 1_i64, idxc.pos / POS_SIZE
-          loop do
-            dataf.seek Ph.read_pos idxc
+          l = 0_i64
+          r = ((idxc.size - 1) / POS_SIZE).to_i64!
+          while l <= r
+            m = l + ((r - l) / 2).floor.to_i64!
 
-            dk = (Ph.read dataf).not_nil!
-            puts "dk = #{dk.hexstring}"
-            _c = k <=> dk
+            idxc.pos = m * POS_SIZE
+            dp = (Ph.read_pos idxc).to_i64!
+            @stats.add_seek dp - dataf.pos
+            dataf.seek dp
+
             @stats.reads += 1
-            return Ph.read dataf if _c == 0
+            dk = (Ph.read dataf).not_nil!
 
-            c = _c <= 0 ? _c < 0 ? -1 : 0 : 1
-            raise IO::EOFError.new if step.abs == 1 && c * step < 0
-
-            step = c * step.abs
-            if step.abs != 1
-              if step.abs < 2
-                step = step > 0 ? 1 : -1
-              else
-                step /= 2
-              end
-            end
-
-            posd = (step.round * POS_SIZE - POS_SIZE).to_i64!
-            if posd != 0
-              idxc.pos += posd
-              @stats.add_seek posd
-            end
+            c = dk <=> k
+            return Ph.read dataf if c == 0
+            l = m + 1 if c < 0
+            r = m - 1 if c > 0
           end
         rescue IO::EOFError
           next
