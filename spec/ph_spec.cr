@@ -3,8 +3,22 @@ require "../src/ph.cr"
 
 N = 10
 
+def delete(path : String)
+  Dir.glob("#{path}/**/*") do |file|
+    File.delete(file) unless Dir.exists?(file)
+  end
+  Dir.glob("#{path}/**/").reverse.each do |dir|
+    Dir.delete(dir)
+  end
+  Dir.delete(path) if Dir.exists?(path)
+end
+
 describe Ph do
   conf = File.read "env.yml"
+  confp = YAML.parse conf
+  delete confp["log"]["path"].as_s
+  delete confp["sst"]["path"].as_s
+
   env = Ph::Env.from_yaml conf
 
   kv = Hash(Bytes, Bytes).new
