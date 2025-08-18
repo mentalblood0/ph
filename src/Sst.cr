@@ -29,10 +29,16 @@ module Ph
       free = Hash(UInt16, Array(UInt64)).new
       begin
         File.open("#{@path}/free") do |freef|
-          pos = Ph.read_pos freef
-          size = Ph.read_size freef
-          free[size] = Array(UInt64).new unless free[size]?
-          free[size] << pos
+          loop do
+            begin
+              pos = Ph.read_pos freef
+              size = Ph.read_size freef
+              free[size] = Array(UInt64).new unless free[size]?
+              free[size] << pos
+            rescue IO::EOFError
+              break
+            end
+          end
         end
       rescue File::NotFoundError
       end
@@ -74,10 +80,10 @@ module Ph
         end
       end
 
-      idxb = IO::Memory.new
       datab = IO::Memory.new
       freekvs = free.to_a
       freekvs.sort_by! { |k, _| k }
+      kpos = Array(Tuple(Bytes, UInt64)).new
       h.each do |hk, hv|
         ow = false
         freekvs.each do |size, poses|
@@ -92,11 +98,12 @@ module Ph
           Ph.write undob, hk, hv
           undof.write undob.to_slice
 
-          Ph.write_pos idxb, dataf.pos.to_u64!
+          kpos << {hk, dataf.pos.to_u64!}
           Ph.write dataf, hk, hv
           ow = true
         end
-        Ph.write_pos idxb, ds + datab.pos.to_u64!
+        next if ow
+        kpos << {hk, ds + datab.pos.to_u64}
         Ph.write datab, hk, hv unless ow
       end
       dataf.seek 0, IO::Seek::End
@@ -115,6 +122,10 @@ module Ph
 
       undof.delete
 
+      idxb = IO::Memory.new
+      kpos.sort_by! { |k, _| k }
+      kpos.each { |_, pos| Ph.write_pos idxb, pos }
+
       idxc = File.open Ph.filepath(@path, @idx.size, "idx"), "w+"
       idxc.sync = true
       idxc.write idxb.to_slice
@@ -125,25 +136,14 @@ module Ph
       include YAML::Serializable
       include YAML::Serializable::Strict
 
-      getter seeks_short : UInt64 = 0_u64
-      getter seeks_long : UInt64 = 0_u64
-      getter seeks_total : UInt64 { seeks_short + seeks_long }
+      property seeks : UInt64 = 0_u64
       property reads : UInt64 = 0_u64
 
       def initialize
       end
 
-      def add_seek(posd : Int64)
-        if posd.abs == POS_SIZE
-          @seeks_short += 1
-        else
-          @seeks_long += 1
-        end
-      end
-
       def reset
-        @seeks_short = 0_u64
-        @seeks_long = 0_u64
+        @seeks = 0_u64
         @reads = 0_u64
       end
     end
@@ -158,22 +158,25 @@ module Ph
 
         begin
           l = 0_i64
-          r = ((idxc.size - 1) / POS_SIZE).to_i64!
+          r = (idxc.size // POS_SIZE - 1).to_i64!
           while l <= r
             m = l + ((r - l) / 2).floor.to_i64!
-
             idxc.pos = m * POS_SIZE
-            dp = (Ph.read_pos idxc).to_i64!
-            @stats.add_seek dp - dataf.pos
-            dataf.seek dp
+
+            @stats.seeks += 1
+            @stats.reads += 1
+            dataf.seek Ph.read_pos idxc
 
             @stats.reads += 1
             dk = (Ph.read dataf).not_nil!
 
-            c = dk <=> k
-            return Ph.read dataf if c == 0
-            l = m + 1 if c < 0
-            r = m - 1 if c > 0
+            case c = dk <=> k
+            when 0
+              @stats.reads += 1
+              return Ph.read dataf
+            when .< 0 then l = m + 1
+            when .> 0 then r = m - 1
+            end
           end
         rescue IO::EOFError
           next

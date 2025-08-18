@@ -1,7 +1,7 @@
 require "spec"
 require "../src/ph.cr"
 
-N = 2
+N = 10
 
 describe Ph do
   conf = File.read "env.yml"
