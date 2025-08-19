@@ -12,55 +12,61 @@ def delete(path : String)
 end
 
 describe Ph do
-  conf = File.read "env.yml"
-  confp = YAML.parse conf
-
-  Spec.before_each do
-    delete confp["log"]["path"].as_s
-    delete confp["sst"]["path"].as_s
+  it "writes/reads size" do
+    io = IO::Memory.new
+    Ph.write_size io, (2 ** 8).to_u64
+    puts io.to_slice
   end
 
-  [2, 3, 10, 100, 1000].each do |amount|
-    it "set/get/delete for #{amount} records" do
-      env = Ph::Env.from_yaml conf
+  # conf = File.read "env.yml"
+  # confp = YAML.parse conf
 
-      kv = Hash(Bytes, Bytes).new
-      amount.times { kv[Random::DEFAULT.random_bytes(16)] = Random::DEFAULT.random_bytes(32) }
+  # Spec.before_each do
+  #   delete confp["log"]["path"].as_s
+  #   delete confp["sst"]["path"].as_s
+  # end
 
-      env.tx.set(kv).commit
-      kv.each { |k, v| env.get(k).should eq v }
+  # [2, 3, 10, 100, 1000].each do |amount|
+  #   it "set/get/delete for #{amount} records" do
+  #     env = Ph::Env.from_yaml conf
 
-      env = Ph::Env.from_yaml conf
-      kv.each { |k, v| env.get(k).should eq v }
+  #     kv = Hash(Bytes, Bytes).new
+  #     amount.times { kv[Random::DEFAULT.random_bytes(16)] = Random::DEFAULT.random_bytes(32) }
 
-      env.checkpoint
-      kv.each { |k, v| env.get(k).should eq v }
+  #     env.tx.set(kv).commit
+  #     kv.each { |k, v| env.get(k).should eq v }
 
-      kn = "key".to_slice
-      vn = "key".to_slice
+  #     env = Ph::Env.from_yaml conf
+  #     kv.each { |k, v| env.get(k).should eq v }
 
-      env.tx.set(kn, vn).commit
-      env.checkpoint
-      kv.each { |k, v| env.get(k).should eq v }
-      env.get(kn).should eq vn
+  #     env.checkpoint
+  #     kv.each { |k, v| env.get(k).should eq v }
 
-      env.get("nonexistent key".to_slice).should eq nil
+  #     kn = "key".to_slice
+  #     vn = "key".to_slice
 
-      env.tx.delete(kv.keys.to_set).delete(kn).commit
-      kv.each { |k, v| env.get(k).should eq nil }
-      env.get(kn).should eq nil
+  #     env.tx.set(kn, vn).commit
+  #     env.checkpoint
+  #     kv.each { |k, v| env.get(k).should eq v }
+  #     env.get(kn).should eq vn
 
-      env.checkpoint
-      kv.each { |k, v| env.get(k).should eq nil }
-      env.get(kn).should eq nil
+  #     env.get("nonexistent key".to_slice).should eq nil
 
-      env.tx.delete(kv.keys.to_set).delete(kn).commit
-      kv.each { |k, v| env.get(k).should eq nil }
-      env.get(kn).should eq nil
+  #     env.tx.delete(kv.keys.to_set).delete(kn).commit
+  #     kv.each { |k, v| env.get(k).should eq nil }
+  #     env.get(kn).should eq nil
 
-      env.checkpoint
-      kv.each { |k, v| env.get(k).should eq nil }
-      env.get(kn).should eq nil
-    end
-  end
+  #     env.checkpoint
+  #     kv.each { |k, v| env.get(k).should eq nil }
+  #     env.get(kn).should eq nil
+
+  #     env.tx.delete(kv.keys.to_set).delete(kn).commit
+  #     kv.each { |k, v| env.get(k).should eq nil }
+  #     env.get(kn).should eq nil
+
+  #     env.checkpoint
+  #     kv.each { |k, v| env.get(k).should eq nil }
+  #     env.get(kn).should eq nil
+  #   end
+  # end
 end

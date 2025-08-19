@@ -5,16 +5,39 @@ module Ph
 
   POS_SIZE = 6_u8
 
-  def self.write_size(io : IO, size : UInt16?)
+  protected def self.effective_bits(value : UInt64) : Int32
+    return 1 if value == 0
+    bits = 0
+    temp = value
+    while temp > 0
+      bits += 1
+      temp >>= 1
+    end
+    bits
+  end
+
+  def self.write_size(io : IO, size : UInt64?)
     if size
-      IO::ByteFormat::BigEndian.encode size, io
+      r = size + ((((effective_bits size) / 8).ceil - 1).to_u64! << 61)
+      IO::ByteFormat::BigEndian.encode r, io
     else
       IO::ByteFormat::BigEndian.encode UInt16::MAX, io
     end
   end
 
+  def self.size_size(size : UInt64)
+    1 + ((IO::ByteFormat::BigEndian.decode UInt8, io) >> 5)
+  end
+
   def self.read_size(io : IO)
-    IO::ByteFormat::BigEndian.decode UInt16, io
+    first = IO::ByteFormat::BigEndian.decode UInt8, io
+    r = (first & 0b00011111).to_u64!
+
+    other = Bytes.new first >> 5
+    io.read_fully other
+
+    other.each { |o| other = (other << 8) + o }
+    r
   end
 
   def self.write(io : IO, o : Bytes?)
