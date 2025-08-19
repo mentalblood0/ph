@@ -12,7 +12,7 @@ module Ph
     @[YAML::Field(ignore: true)]
     getter idx : Array(File) = [] of File
     @[YAML::Field(ignore: true)]
-    getter data : Array(File) = [] of File
+    @data : File = File.new File::NULL, "r+"
 
     def after_initialize
       Dir.mkdir_p @path
@@ -20,9 +20,8 @@ module Ph
       @idx = Dir.glob("#{@path}/*.idx").sort.map { |p| File.open p, "r+" }
       @idx.each { |f| f.sync = true }
 
-      @data = Dir.glob("#{@path}/*.dat").sort.map { |p| File.open p, "r+" }
-      @data = [File.open Ph.filepath(@path, 0, "dat"), "w+"] if @data.empty?
-      @data.each { |f| f.sync = true }
+      @data = (File.open "#{@path}/data", "r+" rescue File.open "#{@path}/data", "w+")
+      @data.sync = true
     end
 
     def write(h : Hash(Bytes, Bytes?))
@@ -46,35 +45,33 @@ module Ph
       undof = File.open "#{@path}/undo", "w"
       undof.sync = true
 
-      dataf = @data.last
-
-      ds = dataf.size.to_u64
+      ds = @data.size.to_u64
       Ph.write_pos undof, ds
 
-      dataf.rewind
+      @data.rewind
       loop do
         begin
-          k = Ph.read dataf
-          size = Ph.read_size dataf
+          k = Ph.read @data
+          size = Ph.read_size @data
 
           if (size != UInt16::MAX) && (h[k] == nil rescue false)
-            pos = dataf.pos.to_u64!
+            pos = @data.pos.to_u64!
             free[size] = Array(UInt64).new unless free[size]?
             free[size] << pos
 
-            dataf.pos -= 2
+            @data.pos -= 2
 
             undob = IO::Memory.new
-            Ph.write_pos undob, dataf.pos.to_u64!
+            Ph.write_pos undob, @data.pos.to_u64!
             Ph.write_size undob, 2_u16
             Ph.write_size undob, size
             undof.write undob.to_slice
 
-            Ph.write_size dataf, nil
+            Ph.write_size @data, nil
             h.delete k
           end
 
-          dataf.skip size
+          @data.skip size
         rescue IO::EOFError
           break
         end
@@ -90,24 +87,24 @@ module Ph
           next if poses.empty?
           rs = (2 + hk.size + 2 + hv.not_nil!.size).to_u16!
           next unless size >= rs
-          dataf.pos = poses.pop
+          @data.pos = poses.pop
 
           undob = IO::Memory.new
-          Ph.write_pos undob, dataf.pos.to_u64!
+          Ph.write_pos undob, @data.pos.to_u64!
           Ph.write_size undob, rs
           Ph.write undob, hk, hv
           undof.write undob.to_slice
 
-          kpos << {hk, dataf.pos.to_u64!}
-          Ph.write dataf, hk, hv
+          kpos << {hk, @data.pos.to_u64!}
+          Ph.write @data, hk, hv
           ow = true
         end
         next if ow
         kpos << {hk, ds + datab.pos.to_u64}
         Ph.write datab, hk, hv unless ow
       end
-      dataf.seek 0, IO::Seek::End
-      dataf.write datab.to_slice
+      @data.seek 0, IO::Seek::End
+      @data.write datab.to_slice
 
       undof.close
 
@@ -154,7 +151,6 @@ module Ph
     def get(k : Bytes)
       (@idx.size - 1).downto(0) do |i|
         idxc = @idx[i]
-        dataf = @data.last
 
         begin
           l = 0_i64
@@ -165,15 +161,15 @@ module Ph
 
             @stats.seeks += 1
             @stats.reads += 1
-            dataf.seek Ph.read_pos idxc
+            @data.seek Ph.read_pos idxc
 
             @stats.reads += 1
-            dk = (Ph.read dataf).not_nil!
+            dk = (Ph.read @data).not_nil!
 
             case c = dk <=> k
             when 0
               @stats.reads += 1
-              return Ph.read dataf
+              return Ph.read @data
             when .< 0 then l = m + 1
             when .> 0 then r = m - 1
             end
