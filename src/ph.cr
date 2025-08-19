@@ -64,7 +64,7 @@ module Ph
       return if @h.empty?
 
       @sst.write @h
-      @log.rotate
+      @log.truncate
       @h.clear
     end
 
