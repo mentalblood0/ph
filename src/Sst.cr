@@ -25,7 +25,7 @@ module Ph
     end
 
     def write(h : Hash(Bytes, Bytes?))
-      free = Hash(UInt16, Array(UInt64)).new
+      free = Hash(UInt64, Array(UInt64)).new
       begin
         File.open("#{@path}/free") do |freef|
           loop do
@@ -54,16 +54,16 @@ module Ph
           k = Ph.read @data
           size = Ph.read_size @data
 
-          if (size != UInt16::MAX) && (h[k] == nil rescue false)
+          if (size != SIZE_NIL) && (h[k] == nil rescue false)
             pos = @data.pos.to_u64!
             free[size] = Array(UInt64).new unless free[size]?
             free[size] << pos
 
-            @data.pos -= 2
+            @data.pos -= Ph.size size
 
             undob = IO::Memory.new
             Ph.write_pos undob, @data.pos.to_u64!
-            Ph.write_size undob, 2_u16
+            Ph.write_size undob, Ph.size size
             Ph.write_size undob, size
             undof.write undob.to_slice
 
@@ -82,10 +82,12 @@ module Ph
       freekvs.sort_by! { |k, _| k }
       kpos = Array(Tuple(Bytes, UInt64)).new
       h.each do |hk, hv|
+        next unless hv
         ow = false
         freekvs.each do |size, poses|
           next if poses.empty?
-          rs = (2 + hk.size + 2 + hv.not_nil!.size).to_u16!
+          rs = Ph.size hk, hv.not_nil!
+          puts "size = #{size}, rs = #{rs}"
           next unless size >= rs
           @data.pos = poses.pop
 
@@ -169,7 +171,8 @@ module Ph
             case c = dk <=> k
             when 0
               @stats.reads += 1
-              return Ph.read @data
+              r = Ph.read @data
+              return r
             when .< 0 then l = m + 1
             when .> 0 then r = m - 1
             end

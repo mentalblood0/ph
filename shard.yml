@@ -1,12 +1,9 @@
-name: shoco
+name: ph
 version: 0.1.0
 
 authors:
   - mentalblood0 <necheporenko.stepan@yandex.ru>
 
 crystal: '>= 1.17.0'
-
-scripts:
-  postinstall: cd src/ && git clone --depth 1 https://github.com/Ed-von-Schleck/shoco && cd shoco && gcc -c shoco.c -std=c99 -O3 -Wall -Wextra
 
 license: MIT

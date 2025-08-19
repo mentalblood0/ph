@@ -4,6 +4,7 @@ module Ph
   alias KV = {K, V}
 
   POS_SIZE = 6_u8
+  SIZE_NIL = UInt64::MAX >> 3
 
   protected def self.effective_bits(value : UInt64) : Int32
     return 1 if value == 0
@@ -16,33 +17,47 @@ module Ph
     bits
   end
 
+  def self.size(size : UInt64)
+    ((3 + effective_bits size) / 8).ceil.to_u64!
+  end
+
+  def self.size(b : Bytes)
+    b.size.to_u64! + size b.size.to_u64!
+  end
+
+  def self.size(k : Bytes, v : Bytes)
+    (size k) + (size v)
+  end
+
   def self.write_size(io : IO, size : UInt64?)
     if size
-      r = size + ((((effective_bits size) / 8).ceil - 1).to_u64! << 61)
-      IO::ByteFormat::BigEndian.encode r, io
+      obc = (size size) - 1
+      puts "write size #{size}; obc = #{obc}"
+      r = (size << ((7 - obc) * 8)) + (obc << 61)
+      t = Bytes.new 8
+      IO::ByteFormat::BigEndian.encode r, t
+      io.write t[..obc]
     else
-      IO::ByteFormat::BigEndian.encode UInt16::MAX, io
+      write_size io, SIZE_NIL
     end
   end
 
-  def self.size_size(size : UInt64)
-    1 + ((IO::ByteFormat::BigEndian.decode UInt8, io) >> 5)
-  end
-
   def self.read_size(io : IO)
+    puts "read_size from pos #{io.pos}"
     first = IO::ByteFormat::BigEndian.decode UInt8, io
+    puts first
     r = (first & 0b00011111).to_u64!
 
     other = Bytes.new first >> 5
     io.read_fully other
 
-    other.each { |o| other = (other << 8) + o }
+    other.each { |o| r = (r << 8) + o }
     r
   end
 
   def self.write(io : IO, o : Bytes?)
     if o
-      write_size io, o.size.to_u16!
+      write_size io, o.size.to_u64!
       io.write o
     else
       write_size io, nil
@@ -56,7 +71,7 @@ module Ph
 
   def self.read(io : IO)
     rs = read_size io
-    return nil if rs == UInt16::MAX
+    return nil if rs == SIZE_NIL
     r = Bytes.new rs
     io.read_fully r
     r
