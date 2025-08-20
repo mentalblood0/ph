@@ -32,8 +32,8 @@ module Ph
           b = Ph.read @data
           next if b.is_a? Ph::Free
 
-          k = (Ph.read @data).as Bytes
-          v = Ph.read @data
+          k = b.as Bytes
+          v = (Ph.read @data).as Bytes | Nil
           npos = @data.pos
 
           if (v.is_a? Bytes) && (h[k] == nil rescue false)
