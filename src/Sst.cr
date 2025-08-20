@@ -25,112 +25,42 @@ module Ph
     end
 
     def write(h : Hash(Bytes, Bytes?))
-      hs = Hash(String, String?).new
-      h.each { |k, v| hs[k.hexstring] = v ? v.hexstring : nil }
-      puts "Sst.write"
-      pp hs
-
-      free = Hash(UInt64, Array(UInt64)).new
-      begin
-        File.open("#{@path}/free") do |freef|
-          loop do
-            begin
-              pos = Ph.read_pos freef
-              size = Ph.read_size freef
-              free[size] = Array(UInt64).new unless free[size]?
-              free[size] << pos
-            rescue IO::EOFError
-              break
-            end
-          end
-        end
-      rescue File::NotFoundError
-      end
-
-      undof = File.open "#{@path}/undo", "w"
-      undof.sync = true
-
-      ds = @data.size.to_u64
-      Ph.write_pos undof, ds
-
+      kpos = Array(Tuple(Bytes, UInt64)).new
       @data.rewind
       loop do
         begin
-          k = (Ph.read @data).not_nil!
-          size = Ph.read_size @data
-          puts "k = #{k.hexstring}; size = #{size}"
+          k = (Ph.read @data).as Bytes
+          v = Ph.read @data
 
-          if (size != SIZE_NIL) && (h[k] == nil rescue false)
-            pos = @data.pos.to_u64!
-            free[size] = Array(UInt64).new unless free[size]?
-            free[size] << pos
+          if (v.is_a? Bytes) && (h[k] == nil rescue false)
+            if fit = h.find { |k, v| (Ph.size k, v) <= Ph.size v }
+              @data.pos -= Ph.size v
+              kpos << {fit[0], @data.pos.to_u64!}
+              @data.write fit[0], fit[1]
 
-            @data.pos -= Ph.size size
+              h.delete fit[0]
+            else
+              @data.pos -= Ph.size v
+              Ph.write @data, nil
 
-            undob = IO::Memory.new
-            Ph.write_pos undob, @data.pos.to_u64!
-            Ph.write_size undob, Ph.size size
-            Ph.write_size undob, size
-            undof.write undob.to_slice
+              if (Ph.size v) > 0
+                Ph.write @data, (Ph.size v) - 1
+              else
+                @data.skip Ph.size v
+              end
+            end
 
-            Ph.write_size @data, nil
             h.delete k
-            puts "delete #{k.hexstring}"
           end
-
-          puts "skipping from @data.pos = #{@data.pos}"
-          puts "#{size} + #{Ph.size size} - #{Ph.size SIZE_NIL}"
-          sk = size + (Ph.size size) - (Ph.size SIZE_NIL)
-          puts "@data.pos = #{@data.pos}; skip #{sk}"
-          @data.skip sk
         rescue IO::EOFError
           break
         end
       end
 
       datab = IO::Memory.new
-      freekvs = free.to_a
-      freekvs.sort_by! { |k, _| k }
-      kpos = Array(Tuple(Bytes, UInt64)).new
-      h.each do |hk, hv|
-        next unless hv
-        ow = false
-        freekvs.each do |size, poses|
-          next if poses.empty?
-          rs = Ph.size hk, hv.not_nil!
-          puts "size = #{size}, rs = #{rs}"
-          next unless size >= rs
-          @data.pos = poses.pop
-
-          undob = IO::Memory.new
-          Ph.write_pos undob, @data.pos.to_u64!
-          Ph.write_size undob, rs
-          Ph.write undob, hk, hv
-          undof.write undob.to_slice
-
-          kpos << {hk, @data.pos.to_u64!}
-          Ph.write @data, hk, hv
-          ow = true
-        end
-        next if ow
-        kpos << {hk, ds + datab.pos.to_u64}
-        Ph.write datab, hk, hv unless ow
-      end
+      h.each { |k, v| Ph.write datab, k, v }
       @data.seek 0, IO::Seek::End
       @data.write datab.to_slice
-
-      undof.close
-
-      freeb = IO::Memory.new
-      freekvs.each do |size, poses|
-        poses.each do |pos|
-          Ph.write_pos freeb, pos
-          Ph.write_size freeb, size
-        end
-      end
-      File.write "#{@path}/free", freeb unless freeb.empty?
-
-      undof.delete
 
       idxb = IO::Memory.new
       kpos.sort_by! { |k, _| k }
@@ -162,7 +92,6 @@ module Ph
     getter stats : Stats = Stats.new
 
     def get(k : Bytes)
-      puts "Sst.get #{k.hexstring}"
       (@idx.size - 1).downto(0) do |i|
         idxc = @idx[i]
 
@@ -178,12 +107,12 @@ module Ph
             @data.seek Ph.read_pos idxc
 
             @stats.reads += 1
-            dk = (Ph.read @data).not_nil!
+            dk = (Ph.read @data).as Bytes
 
             case c = dk <=> k
             when 0
               @stats.reads += 1
-              r = Ph.read @data
+              r = (Ph.read @data).as Bytes?
               return r
             when .< 0 then l = m + 1
             when .> 0 then r = m - 1

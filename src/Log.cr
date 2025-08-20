@@ -20,8 +20,8 @@ module Ph
       File.open @f.path do |f|
         loop do
           begin
-            k = (Ph.read f).not_nil!
-            v = Ph.read f
+            k = (Ph.read f).as Bytes
+            v = (Ph.read f).as Bytes?
             yield({k, v})
           rescue IO::EOFError
             break

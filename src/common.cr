@@ -33,8 +33,8 @@ module Ph
   # 1: allocated?
   # 1: has content?
   # 2: additional size bytes amount
-  # 4: first bits of size
-  # 0/8/16/24: other bits of size
+  # 4: first size bits
+  # 0/8/16/24: other size bits
 
   enum Header : UInt8
     FREE = 0b00000000_u8
