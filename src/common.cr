@@ -21,11 +21,11 @@ module Ph
     ((4 + effective_bits size) / 8).ceil.to_u32!
   end
 
-  def self.size(b : Bytes)
-    b.size.to_u32! + header_size b.size.to_u32!
+  def self.size(b : Bytes?)
+    b ? b.size.to_u32! + header_size b.size.to_u32! : 1_u32
   end
 
-  def self.size(k : Bytes, v : Bytes)
+  def self.size(k : Bytes, v : Bytes?)
     (size k) + (size v)
   end
 
@@ -71,7 +71,7 @@ module Ph
   end
 
   def self.read(io : IO) : Block
-    first = io.read_byte.not_nil!
+    first = io.read_byte.not_nil! rescue raise IO::EOFError.new
     return nil if first == Header::NIL.value
 
     size = (first & 0b00001111_u8).to_u32!

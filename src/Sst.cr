@@ -29,14 +29,18 @@ module Ph
       @data.rewind
       loop do
         begin
+          b = Ph.read @data
+          next if b.is_a? Ph::Free
+
           k = (Ph.read @data).as Bytes
           v = Ph.read @data
+          npos = @data.pos
 
           if (v.is_a? Bytes) && (h[k] == nil rescue false)
             if fit = h.find { |k, v| (Ph.size k, v) <= Ph.size v }
               @data.pos -= Ph.size v
               kpos << {fit[0], @data.pos.to_u64!}
-              @data.write fit[0], fit[1]
+              Ph.write @data, fit[0], fit[1]
 
               h.delete fit[0]
             else
@@ -45,21 +49,24 @@ module Ph
 
               if (Ph.size v) > 0
                 Ph.write @data, (Ph.size v) - 1
-              else
-                @data.skip Ph.size v
               end
             end
 
             h.delete k
           end
+
+          @data.pos = npos
         rescue IO::EOFError
           break
         end
       end
 
-      datab = IO::Memory.new
-      h.each { |k, v| Ph.write datab, k, v }
       @data.seek 0, IO::Seek::End
+      datab = IO::Memory.new
+      h.each do |k, v|
+        kpos << {k, (@data.pos + datab.pos).to_u64!}
+        Ph.write datab, k, v
+      end
       @data.write datab.to_slice
 
       idxb = IO::Memory.new
