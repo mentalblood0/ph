@@ -5,8 +5,6 @@ module Ph
     include YAML::Serializable
     include YAML::Serializable::Strict
 
-    POS_SIZE = 6_i64
-
     getter path : String
 
     @[YAML::Field(ignore: true)]
@@ -73,7 +71,7 @@ module Ph
       kpos.sort_by! { |k, _| k }
       kpos.each { |_, pos| Ph.write_pos idxb, pos }
 
-      idxc = File.open Ph.filepath(@path, @idx.size, "idx"), "w+"
+      idxc = File.open "#{@path}/#{(@idx.size.to_u64.to_s 16).rjust 16, '0'}.idx", "w+"
       idxc.sync = true
       idxc.write idxb.to_slice
       @idx << idxc

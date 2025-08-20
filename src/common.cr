@@ -1,10 +1,8 @@
 module Ph
   alias K = Bytes
   alias V = Bytes
-  alias KV = {K, V}
 
   POS_SIZE = 6_u8
-  SIZE_NIL = UInt64::MAX >> 3
 
   protected def self.effective_bits(value : UInt64) : Int32
     return 1 if value == 0
@@ -96,11 +94,5 @@ module Ph
     posb = Bytes.new 8
     io.read_fully posb[8 - POS_SIZE..]
     IO::ByteFormat::BigEndian.decode UInt64, posb
-  end
-
-  def self.filepath(root : String, i : Int32, type : String)
-    ib = Bytes.new 8
-    IO::ByteFormat::BigEndian.encode i.to_u64!, ib
-    "#{root}/#{ib.hexstring}.#{type}"
   end
 end
