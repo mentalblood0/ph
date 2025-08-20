@@ -47,21 +47,19 @@ module Ph
 
   def self.write(io : IO, block : Block)
     case block
-    when Nil then io.write_byte Header::NIL.value
+    when Nil
+      io.write_byte Header::NIL.value
     when Free, Bytes
       size = (block.is_a? Free) ? block : block.size.to_u32!
       raise "too big" unless size < 2 ** 28
+
       obc = (header_size size) - 1
-      # puts "obc = #{obc}"
-      # puts "size = #{size}"
       type = (block.is_a? Free) ? Header::FREE : Header::ZERO
-      # puts "#{(type.value.to_u32 << 24).to_s(2).rjust 32, '0'} |\n#{(obc << 28).to_s(2).rjust 32, '0'} |\n#{(size << ((3 - obc) * 8)).to_s(2).rjust 32, '0'} ="
       r = (type.value.to_u32 << 24) | (obc << 28) | (size << ((3 - obc) * 8))
-      # puts r.to_s(2).rjust(32, '0')[..(obc + 1) * 8 - 1]
-      # puts "12345678" * 4
-      # puts (1..4).map { |i| i.to_s.ljust 8 }.join
+
       t = Bytes.new 4
       IO::ByteFormat::BigEndian.encode r, t
+
       io.write t[..obc]
       io.write block if block.is_a? Bytes
     end
@@ -72,26 +70,18 @@ module Ph
     write io, v
   end
 
-  def self.read_size(io : IO)
-    # puts "read_size from pos #{io.pos}"
+  def self.read(io : IO) : Block
     first = io.read_byte.not_nil!
-    # puts "first = #{first.to_s 2}"
-    r = (first & 0b00001111_u8).to_u32!
-    # puts "r = #{r}"
+    return nil if first == Header::NIL.value
 
+    size = (first & 0b00001111_u8).to_u32!
     other = Bytes.new (first & 0b00110000_u8) >> 4
-    # puts "other.size = #{other.size}"
     io.read_fully other
+    other.each { |o| size = (size << 8) + o }
 
-    other.each { |o| r = (r << 8) + o }
-    r
-  end
+    return size if (first & 0b11000000) == 0
 
-  def self.read(io : IO)
-    rs = read_size io
-    # puts "rs = #{rs}"
-    return nil if rs == SIZE_NIL
-    r = Bytes.new rs
+    r = Bytes.new size
     io.read_fully r
     r
   end
