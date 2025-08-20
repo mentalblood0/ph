@@ -17,50 +17,53 @@ module Ph
     bits
   end
 
-  def self.size(size : UInt64)
-    ((3 + effective_bits size) / 8).ceil.to_u64!
+  def self.header_size(size : UInt32)
+    ((4 + effective_bits size) / 8).ceil.to_u32!
   end
 
   def self.size(b : Bytes)
-    b.size.to_u64! + size b.size.to_u64!
+    b.size.to_u32! + header_size b.size.to_u32!
   end
 
   def self.size(k : Bytes, v : Bytes)
     (size k) + (size v)
   end
 
-  def self.write_size(io : IO, size : UInt64?)
-    if size
-      obc = (size size) - 1
-      puts "write size #{size}; obc = #{obc}"
-      r = (size << ((7 - obc) * 8)) + (obc << 61)
-      t = Bytes.new 8
+  # header bits:
+  # 1: allocated?
+  # 1: has content?
+  # 2: additional size bytes amount
+  # 4: first bits of size
+  # 0/8/16/24: other bits of size
+
+  enum Header : UInt8
+    FREE = 0b00000000_u8
+    NIL  = 0b10000000_u8
+    ZERO = 0b11000000_u8
+  end
+
+  alias Free = UInt32
+  alias Block = Free | Nil | Bytes
+
+  def self.write(io : IO, block : Block)
+    case block
+    when Nil then io.write_byte Header::NIL.value
+    when Free, Bytes
+      size = (block.is_a? Free) ? block : block.size.to_u32!
+      raise "too big" unless size < 2 ** 28
+      obc = (header_size size) - 1
+      # puts "obc = #{obc}"
+      # puts "size = #{size}"
+      type = (block.is_a? Free) ? Header::FREE : Header::ZERO
+      # puts "#{(type.value.to_u32 << 24).to_s(2).rjust 32, '0'} |\n#{(obc << 28).to_s(2).rjust 32, '0'} |\n#{(size << ((3 - obc) * 8)).to_s(2).rjust 32, '0'} ="
+      r = (type.value.to_u32 << 24) | (obc << 28) | (size << ((3 - obc) * 8))
+      # puts r.to_s(2).rjust(32, '0')[..(obc + 1) * 8 - 1]
+      # puts "12345678" * 4
+      # puts (1..4).map { |i| i.to_s.ljust 8 }.join
+      t = Bytes.new 4
       IO::ByteFormat::BigEndian.encode r, t
       io.write t[..obc]
-    else
-      write_size io, SIZE_NIL
-    end
-  end
-
-  def self.read_size(io : IO)
-    puts "read_size from pos #{io.pos}"
-    first = IO::ByteFormat::BigEndian.decode UInt8, io
-    puts first
-    r = (first & 0b00011111).to_u64!
-
-    other = Bytes.new first >> 5
-    io.read_fully other
-
-    other.each { |o| r = (r << 8) + o }
-    r
-  end
-
-  def self.write(io : IO, o : Bytes?)
-    if o
-      write_size io, o.size.to_u64!
-      io.write o
-    else
-      write_size io, nil
+      io.write block if block.is_a? Bytes
     end
   end
 
@@ -69,8 +72,24 @@ module Ph
     write io, v
   end
 
+  def self.read_size(io : IO)
+    # puts "read_size from pos #{io.pos}"
+    first = io.read_byte.not_nil!
+    # puts "first = #{first.to_s 2}"
+    r = (first & 0b00001111_u8).to_u32!
+    # puts "r = #{r}"
+
+    other = Bytes.new (first & 0b00110000_u8) >> 4
+    # puts "other.size = #{other.size}"
+    io.read_fully other
+
+    other.each { |o| r = (r << 8) + o }
+    r
+  end
+
   def self.read(io : IO)
     rs = read_size io
+    # puts "rs = #{rs}"
     return nil if rs == SIZE_NIL
     r = Bytes.new rs
     io.read_fully r

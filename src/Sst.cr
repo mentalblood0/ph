@@ -25,6 +25,11 @@ module Ph
     end
 
     def write(h : Hash(Bytes, Bytes?))
+      hs = Hash(String, String?).new
+      h.each { |k, v| hs[k.hexstring] = v ? v.hexstring : nil }
+      puts "Sst.write"
+      pp hs
+
       free = Hash(UInt64, Array(UInt64)).new
       begin
         File.open("#{@path}/free") do |freef|
@@ -51,8 +56,9 @@ module Ph
       @data.rewind
       loop do
         begin
-          k = Ph.read @data
+          k = (Ph.read @data).not_nil!
           size = Ph.read_size @data
+          puts "k = #{k.hexstring}; size = #{size}"
 
           if (size != SIZE_NIL) && (h[k] == nil rescue false)
             pos = @data.pos.to_u64!
@@ -69,9 +75,14 @@ module Ph
 
             Ph.write_size @data, nil
             h.delete k
+            puts "delete #{k.hexstring}"
           end
 
-          @data.skip size
+          puts "skipping from @data.pos = #{@data.pos}"
+          puts "#{size} + #{Ph.size size} - #{Ph.size SIZE_NIL}"
+          sk = size + (Ph.size size) - (Ph.size SIZE_NIL)
+          puts "@data.pos = #{@data.pos}; skip #{sk}"
+          @data.skip sk
         rescue IO::EOFError
           break
         end
@@ -151,6 +162,7 @@ module Ph
     getter stats : Stats = Stats.new
 
     def get(k : Bytes)
+      puts "Sst.get #{k.hexstring}"
       (@idx.size - 1).downto(0) do |i|
         idxc = @idx[i]
 

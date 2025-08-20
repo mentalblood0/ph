@@ -1,4 +1,4 @@
-require "./src/ph.cr"
+require "./src/Env.cr"
 
 lib LibC
   TIOCGWINSZ = 0x5413u32
@@ -25,7 +25,7 @@ env_text = File.read "env.yml"
 ph = Ph::Env.from_yaml env_text
 
 conf_text = File.read "benchmark.yml"
-conf = NamedTuple(amount: UInt64, key_size: UInt16, value_size: UInt16).from_yaml conf_text
+conf = NamedTuple(amount: UInt64, key_size: UInt64, value_size: UInt64).from_yaml conf_text
 bw = conf[:amount] * (2 + conf[:key_size] + 2 + conf[:value_size])
 
 puts "-" * width
