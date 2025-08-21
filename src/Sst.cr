@@ -68,6 +68,7 @@ module Ph
 
           if b.is_a? Free
             ::Log.debug { "found free block of size #{(Ph.size b) + b} at #{(@data.pos - Ph.size b).to_s 16}" }
+            raise "wtf" if (Ph.size b) + b > 100
             @data.pos = cpos
             npos = cpos + (Ph.size b) + b
             kpos += write_fit npos, h

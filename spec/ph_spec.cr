@@ -42,6 +42,7 @@ describe Ph do
     h = Hash(Bytes, Bytes?).new
 
     100.times do
+      rnd.next_bool
       case rnd.rand 0..2
       when 0
         k = rnd.random_bytes rnd.rand 2..16
@@ -62,7 +63,7 @@ describe Ph do
         Log.debug { "checkpoint" }
         env.checkpoint
       end
-      h.each { |k, v| env.get(k).should eq h[k] }
+      h.keys.sort.each { |k| env.get(k).should eq h[k] }
     end
   end
 
