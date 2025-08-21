@@ -35,6 +35,36 @@ describe Ph do
     delete confp["sst"]["path"].as_s
   end
 
+  it "generative test", focus: true do
+    env = Ph::Env.from_yaml conf
+
+    h = Hash(Bytes, Bytes?).new
+
+    100.times do
+      case rnd.rand 0..2
+      when 0
+        puts "add"
+        k = rnd.random_bytes rnd.rand 2..16
+        v = rnd.random_bytes rnd.rand 2..16
+
+        env.tx.set(k, v).commit
+
+        h[k] = v
+      when 1
+        puts "delete"
+        k = h.keys.sample rescue next
+
+        env.tx.delete(k).commit
+
+        h.delete k
+      when 2
+        puts "checkpoint"
+        env.checkpoint
+      end
+      h.each { |k, v| env.get(k).should eq h[k] }
+    end
+  end
+
   [2, 10, 100].each do |amount|
     it "set/get/delete for #{amount} records" do
       env = Ph::Env.from_yaml conf
