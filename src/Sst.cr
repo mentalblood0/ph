@@ -23,15 +23,20 @@ module Ph
     end
 
     protected def write_free(til : Pos)
-      Ph.write @data, (Size.new til - @data.pos) if @data.pos < til
+      if @data.pos < til
+        puts "write_free from #{@data.pos} til #{til} (#{til - @data.pos} bytes)"
+        Ph.write @data, (Size.new til - @data.pos)
+      end
     end
 
     protected def write_fit(til : Pos, h : Hash(K, V?)) : Kpos
+      puts "write_fit from #{@data.pos} til #{til} (#{til - @data.pos} bytes available)"
+
       r = Kpos.new
       p = Pos.new @data.pos
 
       return r unless p + 1 < til
-      fs = til - (p + 1)
+      fs = til - p
 
       h.each do |k, v|
         next unless v
@@ -48,7 +53,7 @@ module Ph
         end
       end
 
-      write_free til
+      write_free til if fs < til - p
       r
     end
 
@@ -57,15 +62,18 @@ module Ph
       @data.rewind
       loop do
         begin
+          cpos = Pos.new @data.pos
           b = Ph.read @data
           npos = Pos.new @data.pos
 
           if b.is_a? Free
-            @data.pos -= Ph.size b
-            npos += b
+            puts "found free block of size #{(Ph.size b) + b} at #{(@data.pos - Ph.size b).to_s 16}"
+            @data.pos = cpos
+            npos = cpos + (Ph.size b) + b
             kpos += write_fit npos, h
           else
             k = b.as K
+            puts "found allocated block of size #{Ph.size k} at #{(@data.pos - Ph.size b).to_s 16}"
             v = (Ph.read @data).as V | Nil
             npos = Pos.new @data.pos
 
@@ -76,6 +84,7 @@ module Ph
 
               h.delete k
 
+              puts "try fit at newly available space at #{@data.pos.to_s 16}"
               kpos += write_fit npos, h
             end
           end
@@ -144,7 +153,7 @@ module Ph
             @data.seek Ph.read_pos idxc
 
             @stats.reads += 1
-            puts "read dk from #{@data.pos.to_s 16}"
+            # puts "read dk from #{@data.pos.to_s 16}"
             dk = (Ph.read @data).as K
 
             case c = dk <=> k

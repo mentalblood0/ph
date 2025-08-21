@@ -11,7 +11,7 @@ def delete(path : String)
   Dir.delete(path) if Dir.exists?(path)
 end
 
-rnd = Random.new 1
+rnd = Random.new 2
 
 describe Ph do
   it "reads/writes values" do
