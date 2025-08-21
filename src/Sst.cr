@@ -38,6 +38,7 @@ module Ph
         size = Ph.size k, v
         if size <= fs
           r << {k, p}
+          puts "fit #{k.hexstring} #{v.hexstring} at #{@data.pos.to_s 16}"
           Ph.write @data, k, v
 
           h.delete k
@@ -70,6 +71,7 @@ module Ph
 
             if (v.is_a? V) && (h[k] == nil rescue false)
               @data.pos -= Ph.size v
+              puts "overwrite block at #{@data.pos} with nil as #{k.hexstring} was deleted"
               Ph.write @data, nil
 
               h.delete k
@@ -88,6 +90,7 @@ module Ph
         @data.seek 0, IO::Seek::End
         datab = IO::Memory.new
         h.each do |k, v|
+          next unless v
           kpos << {k, Pos.new @data.pos + datab.pos}
           Ph.write datab, k, v
         end
@@ -141,6 +144,7 @@ module Ph
             @data.seek Ph.read_pos idxc
 
             @stats.reads += 1
+            puts "read dk from #{@data.pos.to_s 16}"
             dk = (Ph.read @data).as K
 
             case c = dk <=> k

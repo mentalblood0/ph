@@ -43,16 +43,16 @@ describe Ph do
     100.times do
       case rnd.rand 0..2
       when 0
-        puts "add"
         k = rnd.random_bytes rnd.rand 2..16
         v = rnd.random_bytes rnd.rand 2..16
+        puts "add #{k.hexstring} #{v.hexstring}"
 
         env.tx.set(k, v).commit
 
         h[k] = v
       when 1
-        puts "delete"
         k = h.keys.sample rescue next
+        puts "delete #{k.hexstring}"
 
         env.tx.delete(k).commit
 
