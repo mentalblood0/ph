@@ -24,13 +24,13 @@ module Ph
 
     protected def write_free(til : Pos)
       if @data.pos < til
-        puts "write_free from #{@data.pos} til #{til} (#{til - @data.pos} bytes)"
+        ::Log.debug { "write_free from #{@data.pos} til #{til} (#{til - @data.pos} bytes)" }
         Ph.write @data, (Size.new til - @data.pos)
       end
     end
 
     protected def write_fit(til : Pos, h : Hash(K, V?)) : Kpos
-      puts "write_fit from #{@data.pos} til #{til} (#{til - @data.pos} bytes available)"
+      ::Log.debug { "write_fit from #{@data.pos} til #{til} (#{til - @data.pos} bytes available)" }
 
       r = Kpos.new
       p = Pos.new @data.pos
@@ -43,7 +43,7 @@ module Ph
         size = Ph.size k, v
         if size <= fs
           r << {k, p}
-          puts "fit #{k.hexstring} #{v.hexstring} at #{@data.pos.to_s 16}"
+          ::Log.debug { "fit #{k.hexstring} #{v.hexstring} at #{@data.pos.to_s 16}" }
           Ph.write @data, k, v
 
           h.delete k
@@ -67,24 +67,24 @@ module Ph
           npos = Pos.new @data.pos
 
           if b.is_a? Free
-            puts "found free block of size #{(Ph.size b) + b} at #{(@data.pos - Ph.size b).to_s 16}"
+            ::Log.debug { "found free block of size #{(Ph.size b) + b} at #{(@data.pos - Ph.size b).to_s 16}" }
             @data.pos = cpos
             npos = cpos + (Ph.size b) + b
             kpos += write_fit npos, h
           else
             k = b.as K
-            puts "found allocated block of size #{Ph.size k} at #{(@data.pos - Ph.size b).to_s 16}"
+            ::Log.debug { "found allocated block of size #{Ph.size k} at #{(@data.pos - Ph.size b).to_s 16}" }
             v = (Ph.read @data).as V | Nil
             npos = Pos.new @data.pos
 
             if (v.is_a? V) && (h[k] == nil rescue false)
               @data.pos -= Ph.size v
-              puts "overwrite block at #{@data.pos} with nil as #{k.hexstring} was deleted"
+              ::Log.debug { "overwrite block at #{@data.pos} with nil as #{k.hexstring} was deleted" }
               Ph.write @data, nil
 
               h.delete k
 
-              puts "try fit at newly available space at #{@data.pos.to_s 16}"
+              ::Log.debug { "try fit at newly available space at #{@data.pos.to_s 16}" }
               kpos += write_fit npos, h
             end
           end
@@ -153,7 +153,7 @@ module Ph
             @data.seek Ph.read_pos idxc
 
             @stats.reads += 1
-            # puts "read dk from #{@data.pos.to_s 16}"
+            # ::Log.debug { "read dk from #{@data.pos.to_s 16}"}
             dk = (Ph.read @data).as K
 
             case c = dk <=> k

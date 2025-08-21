@@ -1,3 +1,4 @@
+require "log"
 require "spec"
 require "../src/Env.cr"
 
@@ -45,20 +46,20 @@ describe Ph do
       when 0
         k = rnd.random_bytes rnd.rand 2..16
         v = rnd.random_bytes rnd.rand 2..16
-        puts "add #{k.hexstring} #{v.hexstring}"
+        Log.debug { "add #{k.hexstring} #{v.hexstring}" }
 
         env.tx.set(k, v).commit
 
         h[k] = v
       when 1
         k = h.keys.sample rescue next
-        puts "delete #{k.hexstring}"
+        Log.debug { "delete #{k.hexstring}" }
 
         env.tx.delete(k).commit
 
         h.delete k
       when 2
-        puts "checkpoint"
+        Log.debug { "checkpoint" }
         env.checkpoint
       end
       h.each { |k, v| env.get(k).should eq h[k] }
