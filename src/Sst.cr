@@ -94,14 +94,16 @@ module Ph
         @data.write datab.to_slice
       end
 
-      idxb = IO::Memory.new
-      kpos.sort_by! { |k, _| k }
-      kpos.each { |_, pos| Ph.write_pos idxb, pos }
+      unless kpos.empty?
+        idxb = IO::Memory.new
+        kpos.sort_by! { |k, _| k }
+        kpos.each { |_, pos| Ph.write_pos idxb, pos }
 
-      idxc = File.open "#{@path}/#{(@idx.size.to_u64.to_s 16).rjust 16, '0'}.idx", "w+"
-      idxc.sync = true
-      idxc.write idxb.to_slice
-      @idx << idxc
+        idxc = File.open "#{@path}/#{(@idx.size.to_u64.to_s 16).rjust 16, '0'}.idx", "w+"
+        idxc.sync = true
+        idxc.write idxb.to_slice
+        @idx << idxc
+      end
     end
 
     class Stats
