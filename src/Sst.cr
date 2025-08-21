@@ -33,16 +33,15 @@ module Ph
       ::Log.debug { "write_fit from #{@data.pos} til #{til} (#{til - @data.pos} bytes available)" }
 
       r = Kpos.new
-      p = Pos.new @data.pos
 
-      return r unless p + 1 < til
-      fs = til - p
+      return r unless @data.pos + 1 < til
+      fs = til - @data.pos
 
       h.each do |k, v|
         next unless v
         size = Ph.size k, v
         if size <= fs
-          r << {k, p}
+          r << {k, Pos.new @data.pos}
           ::Log.debug { "fit #{k.hexstring} #{v.hexstring} at #{@data.pos.to_s 16}" }
           Ph.write @data, k, v
 
@@ -53,7 +52,7 @@ module Ph
         end
       end
 
-      write_free til if fs < til - p
+      write_free til if fs < til - @data.pos
       r
     end
 
