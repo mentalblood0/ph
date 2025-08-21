@@ -43,6 +43,7 @@ describe Ph do
 
     100.times do
       rnd.next_bool
+      Log.debug { "data: #{(File.read env.sst.data.path).to_slice.hexstring}" }
       case rnd.rand 0..2
       when 0
         k = rnd.random_bytes rnd.rand 2..16

@@ -57,7 +57,7 @@ module Ph
     when Nil
       io.write_byte Header::NIL.value
     when Free, K, V
-      size = (b.is_a? Free) ? (b - header_size b) : b.size.to_u32!
+      size = (b.is_a? Free) ? b : b.size.to_u32!
       raise "too big" unless size < 2 ** 28
 
       obc = (header_size size) - 1
@@ -66,6 +66,7 @@ module Ph
 
       t = Bytes.new 4
       IO::ByteFormat::BigEndian.encode r, t
+      ::Log.debug { "write #{b} (size = #{size}) as #{t[..obc].map { |b| (b.to_s 2).rjust 8, '0' }.join ' '}" } if b.is_a? Free
 
       io.write t[..obc]
       io.write b if b.is_a? K | V
@@ -79,6 +80,7 @@ module Ph
 
   def self.read(io : IO) : Block
     first = io.read_byte.not_nil! rescue raise IO::EOFError.new
+    ::Log.debug { "read first = #{first.to_s 16}" }
     return nil if first == Header::NIL.value
 
     size = (first & 0b00001111_u8).to_u32!

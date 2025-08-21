@@ -10,7 +10,7 @@ module Ph
     @[YAML::Field(ignore: true)]
     getter idx : Array(File) = [] of File
     @[YAML::Field(ignore: true)]
-    @data : File = File.new File::NULL, "r+"
+    getter data : File = File.new File::NULL, "r+"
 
     def after_initialize
       Dir.mkdir_p @path
@@ -24,17 +24,17 @@ module Ph
 
     protected def write_free(til : Pos)
       if @data.pos < til
-        ::Log.debug { "write_free from #{@data.pos} til #{til} (#{til - @data.pos} bytes)" }
+        ::Log.debug { "write_free from #{@data.pos.to_s 16} til #{til.to_s 16} (#{til - @data.pos} bytes)" }
         Ph.write @data, (Size.new til - @data.pos)
       end
     end
 
     protected def write_fit(til : Pos, h : Hash(K, V?)) : Kpos
-      ::Log.debug { "write_fit from #{@data.pos} til #{til} (#{til - @data.pos} bytes available)" }
+      ::Log.debug { "write_fit from #{@data.pos.to_s 16} til #{til.to_s 16} (#{til - @data.pos} bytes available)" }
 
       r = Kpos.new
 
-      return r unless @data.pos + 1 < til
+      return r unless @data.pos < til
       fs = til - @data.pos
 
       h.each do |k, v|
@@ -52,7 +52,7 @@ module Ph
         end
       end
 
-      write_free til if fs < til - @data.pos
+      write_free til
       r
     end
 
@@ -67,19 +67,20 @@ module Ph
 
           if b.is_a? Free
             ::Log.debug { "found free block of size #{(Ph.size b) + b} at #{(@data.pos - Ph.size b).to_s 16}" }
-            raise "wtf" if (Ph.size b) + b > 100
+            raise "wtf" if b > 100
             @data.pos = cpos
-            npos = cpos + (Ph.size b) + b
+            npos = cpos + b
             kpos += write_fit npos, h
           else
             k = b.as K
-            ::Log.debug { "found allocated block of size #{Ph.size k} at #{(@data.pos - Ph.size b).to_s 16}" }
+            ::Log.debug { "found allocated key block of size #{Ph.size k} at #{(@data.pos - Ph.size b).to_s 16}" }
             v = (Ph.read @data).as V | Nil
+            ::Log.debug { "found allocated value block of size #{Ph.size v} at #{(@data.pos - Ph.size v).to_s 16}" }
             npos = Pos.new @data.pos
 
             if (v.is_a? V) && (h[k] == nil rescue false)
               @data.pos -= Ph.size v
-              ::Log.debug { "overwrite block at #{@data.pos} with nil as #{k.hexstring} was deleted" }
+              ::Log.debug { "overwrite block at #{@data.pos.to_s 16} with nil as #{k.hexstring} was deleted" }
               Ph.write @data, nil
 
               h.delete k
@@ -153,7 +154,6 @@ module Ph
             @data.seek Ph.read_pos idxc
 
             @stats.reads += 1
-            # ::Log.debug { "read dk from #{@data.pos.to_s 16}"}
             dk = (Ph.read @data).as K
 
             case c = dk <=> k
