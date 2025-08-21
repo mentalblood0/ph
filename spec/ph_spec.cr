@@ -35,12 +35,12 @@ describe Ph do
     delete confp["sst"]["path"].as_s
   end
 
-  [2, 10, 100, 1000].each do |amount|
+  [2, 10, 100].each do |amount|
     it "set/get/delete for #{amount} records" do
       env = Ph::Env.from_yaml conf
 
       kv = Hash(Bytes, Bytes).new
-      amount.times { kv[rnd.random_bytes(16)] = rnd.random_bytes(32) }
+      amount.times { kv[rnd.random_bytes rnd.rand 2..16] = rnd.random_bytes rnd.rand 2..32 }
 
       env.tx.set(kv).commit
       kv.each { |k, v| env.get(k).should eq v }

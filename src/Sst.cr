@@ -61,6 +61,7 @@ module Ph
 
           if b.is_a? Free
             @data.pos -= Ph.size b
+            npos += b
             kpos += write_fit npos, h
           else
             k = b.as K
