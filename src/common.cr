@@ -2,30 +2,14 @@ module Ph
   alias K = Bytes
   alias V = Bytes
 
+  alias Size = UInt32
+  alias Pos = UInt64
+
+  alias Kpos = Array(Tuple(K, Pos))
+  alias Free = Size
+  alias Block = Free | Nil | K | V
+
   POS_SIZE = 6_u8
-
-  protected def self.effective_bits(value : UInt64) : Int32
-    return 1 if value == 0
-    bits = 0
-    temp = value
-    while temp > 0
-      bits += 1
-      temp >>= 1
-    end
-    bits
-  end
-
-  def self.header_size(size : UInt32)
-    ((4 + effective_bits size) / 8).ceil.to_u32!
-  end
-
-  def self.size(b : Bytes?)
-    b ? b.size.to_u32! + header_size b.size.to_u32! : 1_u32
-  end
-
-  def self.size(k : Bytes, v : Bytes?)
-    (size k) + (size v)
-  end
 
   # header bits:
   # 1: allocated?
@@ -40,30 +24,55 @@ module Ph
     ZERO = 0b11000000_u8
   end
 
-  alias Free = UInt32
-  alias Block = Free | Nil | Bytes
+  protected def self.effective_bits(value : Pos) : Size
+    return Size.new 1 if value == 0
+    bits = Size.new 0
+    temp = Size.new value
+    while temp > 0
+      bits += 1
+      temp >>= 1
+    end
+    bits
+  end
 
-  def self.write(io : IO, block : Block)
-    case block
+  def self.header_size(size : Size) : Size
+    ((4 + effective_bits size) / 8).ceil.to_u32!
+  end
+
+  def self.size(b : Block) : Size
+    case b
+    when Free then header_size b
+    when Nil  then Size.new 1
+    when K, V then Size.new b.size + header_size Size.new b.size
+    else           raise "unreachable"
+    end
+  end
+
+  def self.size(k : K, v : V?) : Size
+    (size k) + (size v)
+  end
+
+  def self.write(io : IO, b : Block)
+    case b
     when Nil
       io.write_byte Header::NIL.value
-    when Free, Bytes
-      size = (block.is_a? Free) ? block : block.size.to_u32!
+    when Free, K, V
+      size = (b.is_a? Free) ? (b - header_size b) : b.size.to_u32!
       raise "too big" unless size < 2 ** 28
 
       obc = (header_size size) - 1
-      type = (block.is_a? Free) ? Header::FREE : Header::ZERO
+      type = (b.is_a? Free) ? Header::FREE : Header::ZERO
       r = (type.value.to_u32 << 24) | (obc << 28) | (size << ((3 - obc) * 8))
 
       t = Bytes.new 4
       IO::ByteFormat::BigEndian.encode r, t
 
       io.write t[..obc]
-      io.write block if block.is_a? Bytes
+      io.write b if b.is_a? K | V
     end
   end
 
-  def self.write(io : IO, k : Bytes, v : Bytes?)
+  def self.write(io : IO, k : K, v : V?)
     write io, k
     write io, v
   end
@@ -84,15 +93,15 @@ module Ph
     r
   end
 
-  def self.write_pos(io : IO, pos : UInt64)
+  def self.write_pos(io : IO, pos : Pos)
     posb = Bytes.new 8
     IO::ByteFormat::BigEndian.encode pos, posb
     io.write posb[8 - POS_SIZE..]
   end
 
-  def self.read_pos(io : IO)
+  def self.read_pos(io : IO) : Pos
     posb = Bytes.new 8
     io.read_fully posb[8 - POS_SIZE..]
-    IO::ByteFormat::BigEndian.decode UInt64, posb
+    IO::ByteFormat::BigEndian.decode Pos, posb
   end
 end

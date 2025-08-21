@@ -22,35 +22,59 @@ module Ph
       @data.sync = true
     end
 
-    def write(h : Hash(Bytes, Bytes?))
-      kpos = Array(Tuple(Bytes, UInt64)).new
+    protected def write_free(til : Pos)
+      Ph.write @data, (Size.new til - @data.pos) if @data.pos < til
+    end
+
+    protected def write_fit(til : Pos, h : Hash(K, V?)) : Kpos
+      r = Kpos.new
+      p = Pos.new @data.pos
+
+      return r unless p + 1 < til
+      fs = til - (p + 1)
+
+      h.each do |k, v|
+        next unless v
+        size = Ph.size k, v
+        if size <= fs
+          r << {k, p}
+          Ph.write @data, k, v
+
+          h.delete k
+
+          fs -= size
+          break if fs < 2
+        end
+      end
+
+      write_free til
+      r
+    end
+
+    def write(h : Hash(K, V?))
+      kpos = Kpos.new
       @data.rewind
       loop do
         begin
           b = Ph.read @data
-          next if b.is_a? Ph::Free
+          npos = Pos.new @data.pos
 
-          k = b.as Bytes
-          v = (Ph.read @data).as Bytes | Nil
-          npos = @data.pos
+          if b.is_a? Free
+            @data.pos -= Ph.size b
+            kpos += write_fit npos, h
+          else
+            k = b.as K
+            v = (Ph.read @data).as V | Nil
+            npos = Pos.new @data.pos
 
-          if (v.is_a? Bytes) && (h[k] == nil rescue false)
-            if fit = h.find { |k, v| (Ph.size k, v) <= Ph.size v }
-              @data.pos -= Ph.size v
-              kpos << {fit[0], @data.pos.to_u64!}
-              Ph.write @data, fit[0], fit[1]
-
-              h.delete fit[0]
-            else
+            if (v.is_a? V) && (h[k] == nil rescue false)
               @data.pos -= Ph.size v
               Ph.write @data, nil
 
-              if (Ph.size v) > 0
-                Ph.write @data, (Ph.size v) - 1
-              end
-            end
+              h.delete k
 
-            h.delete k
+              kpos += write_fit npos, h
+            end
           end
 
           @data.pos = npos
@@ -59,13 +83,15 @@ module Ph
         end
       end
 
-      @data.seek 0, IO::Seek::End
-      datab = IO::Memory.new
-      h.each do |k, v|
-        kpos << {k, (@data.pos + datab.pos).to_u64!}
-        Ph.write datab, k, v
+      unless h.empty?
+        @data.seek 0, IO::Seek::End
+        datab = IO::Memory.new
+        h.each do |k, v|
+          kpos << {k, Pos.new @data.pos + datab.pos}
+          Ph.write datab, k, v
+        end
+        @data.write datab.to_slice
       end
-      @data.write datab.to_slice
 
       idxb = IO::Memory.new
       kpos.sort_by! { |k, _| k }
@@ -96,7 +122,7 @@ module Ph
     @[YAML::Field(ignore: true)]
     getter stats : Stats = Stats.new
 
-    def get(k : Bytes)
+    def get(k : K)
       (@idx.size - 1).downto(0) do |i|
         idxc = @idx[i]
 
@@ -112,12 +138,12 @@ module Ph
             @data.seek Ph.read_pos idxc
 
             @stats.reads += 1
-            dk = (Ph.read @data).as Bytes
+            dk = (Ph.read @data).as K
 
             case c = dk <=> k
             when 0
               @stats.reads += 1
-              r = (Ph.read @data).as Bytes?
+              r = (Ph.read @data).as V?
               return r
             when .< 0 then l = m + 1
             when .> 0 then r = m - 1
