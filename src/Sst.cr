@@ -109,7 +109,6 @@ module Ph
       rescue IO::EOFError
       end
       if lf
-        @data.pos = 0
         @data.truncate lf[:pos]
       end
 
