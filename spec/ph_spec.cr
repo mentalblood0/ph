@@ -31,7 +31,9 @@ describe Ph do
       k = Bytes.new 1, i
       v = Bytes.new 3 * (n - 1 - i)
       env.tx.set(k, v).commit.checkpoint
-        .tx.delete(k).commit.checkpoint
+      Log.debug { "data: #{(File.read env.sst.data.path).to_slice.hexstring}" }
+      env.tx.delete(k).commit.checkpoint
+      Log.debug { "data: #{(File.read env.sst.data.path).to_slice.hexstring}" }
     end
     env.sst.data.size.should eq 3 * n
   end

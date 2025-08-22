@@ -55,24 +55,13 @@ module Ph
       r
     end
 
-    macro mwm
-      if lf
-        @data.pos = lf[:pos]
-        lfe = Pos.new lf[:pos] + lf[:size]
-        kpos += write_fit lfe, h
-        ::Log.debug { "write merged" } if lf[:merged]
-        write_free lfe
-        @data.pos = npos
-        lf = nil
-      end
-    end
-
     def write(h : Hash(K, V?))
       kpos = Kpos.new
       @data.rewind
       lf : NamedTuple(pos: Pos, size: Size, merged: Bool)? = nil
-      loop do
-        begin
+      npos = Pos.new 0
+      begin
+        loop do
           cpos = Pos.new @data.pos
           b = Ph.read @data
           npos = Pos.new @data.pos
@@ -87,7 +76,16 @@ module Ph
               lf = {pos: cpos, size: b, merged: false}
             end
           else
-            mwm
+            if lf
+              @data.pos = lf[:pos]
+              lfe = Pos.new lf[:pos] + lf[:size]
+              kpos += write_fit lfe, h
+              ::Log.debug { "write merged" } if lf[:merged]
+              write_free lfe
+              @data.pos = npos
+              lf = nil
+            end
+
             k = b.as K
             ::Log.debug { "found allocated key block of size #{Ph.size k} at #{(@data.pos - Ph.size b).to_s 16}" }
             v = (Ph.read @data).as V | Nil
@@ -107,10 +105,12 @@ module Ph
           end
 
           @data.pos = npos
-        rescue IO::EOFError
-          break
         end
-        mwm
+      rescue IO::EOFError
+      end
+      if lf
+        @data.pos = 0
+        @data.truncate lf[:pos]
       end
 
       unless h.empty?
