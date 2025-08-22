@@ -26,11 +26,8 @@ module Ph
       return nil unless @data.pos < til
 
       s = Size.new til - @data.pos
-      r = {pos: (Pos.new @data.pos), size: s}
-
       ::Log.debug { "write_free from #{@data.pos.to_s 16} til #{til.to_s 16} (#{s} bytes)" }
       Ph.write @data, s
-      r
     end
 
     protected def write_fit(til : Pos, h : Hash(K, V?)) : Kpos
@@ -61,7 +58,7 @@ module Ph
     def write(h : Hash(K, V?))
       kpos = Kpos.new
       @data.rewind
-      lf : NamedTuple(pos: Pos, size: Size)? = nil
+      lf : NamedTuple(pos: Pos, size: Size, merged: Bool)? = nil
       loop do
         begin
           cpos = Pos.new @data.pos
@@ -72,16 +69,16 @@ module Ph
             ::Log.debug { "found free block of size #{(Ph.size b) + b} at #{(@data.pos - Ph.size b).to_s 16}" }
             npos = cpos + b
             if lf
-              lf = {pos: lf[:pos], size: lf[:size] + b}
+              lf = {pos: lf[:pos], size: lf[:size] + b, merged: true}
             else
-              lf = {pos: cpos, size: b}
+              lf = {pos: cpos, size: b, merged: false}
             end
           else
             if lf
               @data.pos = lf[:pos]
               lfe = Pos.new @data.pos + lf[:size]
               kpos += write_fit lfe, h
-              write_free lfe
+              write_free lfe if lf[:merged] || (@data.pos != lf[:pos])
               @data.pos = npos
               lf = nil
             end
@@ -100,8 +97,7 @@ module Ph
               h.delete k
 
               ::Log.debug { "try fit at newly available space at #{@data.pos.to_s 16}" }
-              kpos += write_fit npos, h
-              lf = write_free npos
+              lf = {pos: (Pos.new @data.pos), size: (Size.new npos - @data.pos), merged: false} if @data.pos < npos
             end
           end
 
