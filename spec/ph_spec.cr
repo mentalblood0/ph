@@ -32,7 +32,6 @@ describe Ph do
     ks = 0..1024
     vs = 0..1024
     100.times do
-      rnd.next_bool
       Log.debug { "data: #{(File.read env.sst.data.path).to_slice.hexstring}" }
       case rnd.rand 0..2
       when 0
@@ -44,7 +43,7 @@ describe Ph do
 
         h[k] = v
       when 1
-        k = h.keys.sample rescue next
+        k = h.keys.sample rnd rescue next
         Log.debug { "delete #{k.hexstring}" }
 
         env.tx.delete(k).commit
