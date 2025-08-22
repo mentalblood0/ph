@@ -51,8 +51,6 @@ module Ph
           break if fs < 2
         end
       end
-
-      write_free til
       r
     end
 
@@ -70,6 +68,7 @@ module Ph
             @data.pos = cpos
             npos = cpos + b
             kpos += write_fit npos, h
+            write_free npos unless @data.pos == cpos
           else
             k = b.as K
             ::Log.debug { "found allocated key block of size #{Ph.size k} at #{(@data.pos - Ph.size b).to_s 16}" }
@@ -86,6 +85,7 @@ module Ph
 
               ::Log.debug { "try fit at newly available space at #{@data.pos.to_s 16}" }
               kpos += write_fit npos, h
+              write_free npos
             end
           end
 
