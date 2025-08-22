@@ -24,6 +24,18 @@ describe Ph do
     delete confp["sst"]["path"].as_s
   end
 
+  it "matryoshka", focus: true do
+    env = Ph::Env.from_yaml conf
+    n = 6
+    0_u8.upto(n - 1) do |i|
+      k = Bytes.new 1, i
+      v = Bytes.new 3 * (n - 1 - i)
+      env.tx.set(k, v).commit.checkpoint
+        .tx.delete(k).commit.checkpoint
+    end
+    env.sst.data.size.should eq 3 * n
+  end
+
   it "generative test" do
     env = Ph::Env.from_yaml conf
 

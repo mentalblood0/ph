@@ -55,6 +55,18 @@ module Ph
       r
     end
 
+    macro mwm
+      if lf
+        @data.pos = lf[:pos]
+        lfe = Pos.new lf[:pos] + lf[:size]
+        kpos += write_fit lfe, h
+        ::Log.debug { "write merged" } if lf[:merged]
+        write_free lfe
+        @data.pos = npos
+        lf = nil
+      end
+    end
+
     def write(h : Hash(K, V?))
       kpos = Kpos.new
       @data.rewind
@@ -66,23 +78,16 @@ module Ph
           npos = Pos.new @data.pos
 
           if b.is_a? Free
-            ::Log.debug { "found free block of size #{(Ph.size b) + b} at #{(@data.pos - Ph.size b).to_s 16}" }
+            ::Log.debug { "found free block of size #{b} at #{(@data.pos - Ph.size b).to_s 16}" }
             npos = cpos + b
             if lf
+              ::Log.debug { "merge" } if lf[:merged]
               lf = {pos: lf[:pos], size: lf[:size] + b, merged: true}
             else
               lf = {pos: cpos, size: b, merged: false}
             end
           else
-            if lf
-              @data.pos = lf[:pos]
-              lfe = Pos.new @data.pos + lf[:size]
-              kpos += write_fit lfe, h
-              write_free lfe if lf[:merged] || (@data.pos != lf[:pos])
-              @data.pos = npos
-              lf = nil
-            end
-
+            mwm
             k = b.as K
             ::Log.debug { "found allocated key block of size #{Ph.size k} at #{(@data.pos - Ph.size b).to_s 16}" }
             v = (Ph.read @data).as V | Nil
@@ -105,6 +110,7 @@ module Ph
         rescue IO::EOFError
           break
         end
+        mwm
       end
 
       unless h.empty?

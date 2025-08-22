@@ -66,7 +66,6 @@ module Ph
 
       t = Bytes.new 4
       IO::ByteFormat::BigEndian.encode r, t
-      ::Log.debug { "write #{b} (size = #{size}) as #{t[..obc].map { |b| (b.to_s 2).rjust 8, '0' }.join ' '}" } if b.is_a? Free
 
       io.write t[..obc]
       io.write b if b.is_a? K | V

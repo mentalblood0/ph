@@ -39,10 +39,11 @@ module Ph
         Ph.write buf, k
         Ph.write buf, v
       end
-      return if buf.empty?
+      return @env if buf.empty?
       @env.log.write buf.to_slice
 
       @env.h.merge! @set
+      @env
     end
   end
 
@@ -61,11 +62,12 @@ module Ph
     end
 
     def checkpoint
-      return if @h.empty?
+      return self if @h.empty?
 
       @sst.write @h
       @log.truncate
       @h.clear
+      self
     end
 
     def tx
