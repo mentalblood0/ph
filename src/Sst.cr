@@ -23,10 +23,14 @@ module Ph
     end
 
     protected def write_free(til : Pos)
-      if @data.pos < til
-        ::Log.debug { "write_free from #{@data.pos.to_s 16} til #{til.to_s 16} (#{til - @data.pos} bytes)" }
-        Ph.write @data, (Size.new til - @data.pos)
-      end
+      return nil unless @data.pos < til
+
+      s = Size.new til - @data.pos
+      r = {pos: (Pos.new @data.pos), size: s}
+
+      ::Log.debug { "write_free from #{@data.pos.to_s 16} til #{til.to_s 16} (#{s} bytes)" }
+      Ph.write @data, s
+      r
     end
 
     protected def write_fit(til : Pos, h : Hash(K, V?)) : Kpos
@@ -57,6 +61,7 @@ module Ph
     def write(h : Hash(K, V?))
       kpos = Kpos.new
       @data.rewind
+      lf : NamedTuple(pos: Pos, size: Size)? = nil
       loop do
         begin
           cpos = Pos.new @data.pos
@@ -65,11 +70,22 @@ module Ph
 
           if b.is_a? Free
             ::Log.debug { "found free block of size #{(Ph.size b) + b} at #{(@data.pos - Ph.size b).to_s 16}" }
-            @data.pos = cpos
             npos = cpos + b
-            kpos += write_fit npos, h
-            write_free npos unless @data.pos == cpos
+            if lf
+              lf = {pos: lf[:pos], size: lf[:size] + b}
+            else
+              lf = {pos: cpos, size: b}
+            end
           else
+            if lf
+              @data.pos = lf[:pos]
+              lfe = Pos.new @data.pos + lf[:size]
+              kpos += write_fit lfe, h
+              write_free lfe
+              @data.pos = npos
+              lf = nil
+            end
+
             k = b.as K
             ::Log.debug { "found allocated key block of size #{Ph.size k} at #{(@data.pos - Ph.size b).to_s 16}" }
             v = (Ph.read @data).as V | Nil
@@ -85,7 +101,7 @@ module Ph
 
               ::Log.debug { "try fit at newly available space at #{@data.pos.to_s 16}" }
               kpos += write_fit npos, h
-              write_free npos
+              lf = write_free npos
             end
           end
 
