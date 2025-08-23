@@ -55,6 +55,45 @@ module Ph
       r
     end
 
+    # sk ~ immutable, indexes of key-value positions pairs sorted by key
+    # sv ~ immutable, indexes of key-value positions pairs sorted by value
+    # idx ~ mutable, key-value positions pairs
+    # data ~ mutable, keys and values
+    #
+    # sk -> idx -> data
+    # sv -> idx -> data
+    # sk, sv = [{i: 5 byte}, ...]
+    # idx = [{kp: 6 byte, vp: 6 byte}, ...]
+    # data = [block | free, ..., block]
+    #
+    # kp, vp = idx.read 12 * sk.read 5
+    # k = data.read_block kp
+    # v = data.read_block vp
+    #
+    #
+    # d : Set(Tuple(Bytes, Bytes)) # deleted
+    # u : Hash(Tuple(Bytes, Bytes), Tuple(Bytes, Bytes)) # updated
+    # ik : Hash(Bytes, Array(Bytes)) # inserted, key -> values
+    # iv : Hash(Bytes, Array(Bytes)) # inserted, value -> keys
+    #
+    # pd : Set(Pos) # possibly deleted data positions
+    # idx.each do |kp, vp|
+    #   if {kp, vp} in d
+    #     idx[{kp, vp}] = {nil, nil}
+    #     pd << kp
+    #     pd << vp
+    #   elsif {kp, vp} in u
+    #     idx[{kp, vp}] = u[{kp, vp}]
+    #     pd << kp if u[{kp, vp}][0] != kp
+    #     pd << vp if u[{kp, vp}][1] != vp
+    #   end
+    # end
+    # pd.each do |p|
+    #   if !ik.contains?(p) && !iv.contains?(p) && idx[{p, ...}].empty? && idx[{..., p}].empty?
+    #     data[kp].free
+    #   end
+    # end
+
     def write(h : Hash(K, V?))
       kpos = Kpos.new
       @data.rewind

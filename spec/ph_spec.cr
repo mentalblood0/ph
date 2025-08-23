@@ -24,7 +24,7 @@ describe Ph do
     delete confp["sst"]["path"].as_s
   end
 
-  it "matryoshka", focus: true do
+  it "matryoshka" do
     env = Ph::Env.from_yaml conf
     n = 6
     0_u8.upto(n - 1) do |i|
