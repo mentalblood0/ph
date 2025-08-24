@@ -85,26 +85,53 @@ module Ph
         when Tuple(K, Nil)
           buf.write_byte OpT::DELETE_KEY.value
           Ph.write buf, op[0]
-          @env.dk << op[0]
+          @env.uk[k].as(Hash(V, KV?)).each { |v, kv| @env.uv[v].delete k } rescue nil
+          @env.uk[k] = nil
+          @env.ik.each { |v| iv.delete v }
+          @env.ik.delete k
         when Tuple(Nil, V)
           buf.write_byte OpT::DELETE_VALUE.value
           Ph.write buf, op[1]
-          @env.dv << op[0]
+          @env.uv[v].as(Hash(K, KV?)).each { |k, kv| @env.uk[k].delete v } rescue nil
+          @env.uv[v] = nil
+          @env.iv.each { |k| ik.delete k }
+          @env.iv.delete v
         when Tuple(KV, Nil)
+          k = op[0][0]
+          v = op[0][1]
           buf.write_byte OpT::DELETE_KEY_VALUE.value
-          Ph.write buf, op[0]
-          @env.d << op[0]
+          Ph.write buf, k, v
+          @env.uk[k] = Hash(V, KV?).new unless @env.uk.has_key? k
+          @env.uk[k][v] = nil
+          @env.uv[v] = Hash(K, KV?).new unless @env.uv.has_key? v
+          @env.uv[v][k] = nil
+          @env.ik[k].delete v rescue nil
+          @env.iv[v].delete k rescue nil
         when KV
           buf.write_byte OpT::INSERT.value
           Ph.write buf, *op
-          @env.ik[op[0]] = op[1]
-          @env.ik[op[1]] = op[0]
+          @env.ik[k] = Set(V).new unless @env.ik.has_key? k
+          @env.ik[k] << v
+          @env.iv[v] = Set(K).new unless @env.iv.has_key? v
+          @env.iv[v] << k
         when Tuple(KV, KV)
+          k = op[0][0]
+          v = op[0][1]
+          nk = op[1][0]
+          nv = op[1][1]
           buf.write_byte OpT::UPDATE.value
           Ph.write buf, *op[0]
           Ph.write buf, *op[1]
-          @env.uo[op[0]] = op[1]
-          @env.un[op[1]] = op[0]
+          @env.uk[k] = Hash(V, KV?).new unless @env.uk.has_key? k
+          @env.uk[k][v] = {nk, nv}
+          @env.uv[v] = Hash(K, KV?).new unless @env.uv.has_key? v
+          @env.uv[v][k] = {nv, nk}
+          if (@env.ik.has_key? k) && (@env.ik[k].includes? v)
+            @env.ik[k].delete v rescue nil
+            @env.ik[k] << v rescue nil
+            @env.iv[v].delete k rescue nil
+            @env.iv[v] << k rescue nil
+          end
         end
       end
       @env.log.write buf.to_slice
@@ -119,13 +146,10 @@ module Ph
     getter log : Log
     getter sst : Sst
 
-    getter dk : Set(K) = Set(K).new
-    getter dv : Set(V) = Set(V).new
-    getter d : Set(KV) = Set(KV).new
-    getter ik : Hash(K, Array(V)) = Hash(K, Array(V)).new
-    getter iv : Hash(V, Array(K)) = Hash(V, Array(K)).new
-    getter uo : Hash(KV, KV) = Hash(KV, KV).new
-    getter un : Hash(KV, KV) = Hash(KV, KV).new
+    getter uk : Hash(K, Hash(V, KV?)?) = Hash(K, Hash(V, KV?)?).new
+    getter uv : Hash(V, Hash(K, KV?)?) = Hash(V, Hash(K, KV?)?).new
+    getter ik : Hash(K, Set(V)) = Hash(K, Set(V)).new
+    getter iv : Hash(V, Set(K)) = Hash(V, Set(K)).new
 
     def after_initialize
       @log.read { |k, v| @h[k] = v }
