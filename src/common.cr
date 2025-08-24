@@ -1,6 +1,7 @@
 module Ph
   alias K = Bytes
   alias V = Bytes
+  alias KV = Tuple(K, V)
 
   alias Size = UInt32
   alias Pos = UInt64
