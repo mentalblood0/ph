@@ -1,3 +1,4 @@
+require "spec"
 require "yaml"
 
 require "./common.cr"
@@ -150,13 +151,13 @@ module Ph
           @env.uk[k].not_nil![v] = {nk, nv}
 
           @env.uv[v] = Hash(K, {K, V}?).new unless @env.uv.has_key? v
-          @env.uv[v].not_nil![k] = {nv, nk}
+          @env.uv[v].not_nil![k] = {nk, nv}
 
           @env.unk[nk] = Hash(V, {K, V}).new unless @env.uk.has_key? nk
           @env.unk[nk].not_nil![nv] = {k, v}
 
           @env.unv[nv] = Hash(K, {K, V}).new unless @env.uv.has_key? nv
-          @env.unv[nv].not_nil![nk] = {v, k}
+          @env.unv[nv].not_nil![nk] = {k, v}
 
           if (@env.unk.has_key? k) && (@env.unk[k].has_key? v)
             ok = @env.unk[k][v][0]
@@ -169,7 +170,7 @@ module Ph
             @env.uk[ok].not_nil![ov] = {k, v}
 
             @env.uv[ov] = Hash(K, {K, V}?).new unless @env.uv.has_key? ov
-            @env.uv[ov].not_nil![ok] = {v, k}
+            @env.uv[ov].not_nil![ok] = {k, v}
           end
 
           if (@env.ik.has_key? k) && (@env.ik[k].includes? v)
@@ -228,6 +229,21 @@ module Ph
 
     def has?(k : K, v : V) : Bool
       return ((unk.has_key? k) && (unk[k].has_key? v)) || ((ik.has_key? k) && (ik[k].includes? v))
+    end
+
+    def check_integrity
+      @uk.each do |k, vkv|
+        next unless vkv
+        vkv.each do |v, nkv|
+          @uv[v].not_nil![k].should eq nkv
+          if nkv
+            nk = nkv[0]
+            nv = nkv[1]
+            @unk[nk][nv].should eq nkv
+            @unv[nv][nk].should eq nkv
+          end
+        end
+      end
     end
   end
 end

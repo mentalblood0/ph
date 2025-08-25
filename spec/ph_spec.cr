@@ -74,6 +74,7 @@ describe Ph do
         s << {nk, nv}
       end
       Log.debug { "s:\n" + s.map { |k, v| "#{k.hexstring}, #{v.hexstring}" }.join '\n' }
+      env.check_integrity
       s.each do |k, v|
         (env.has? k, v).should eq true
         r = env.get k
