@@ -127,7 +127,6 @@ module Ph
           @env.iv[v].delete k rescue nil
           @env.ik[k].delete v rescue nil
         when {K, V}
-          ::Log.debug { "commit insert" }
           k = op[0].as K
           v = op[1].as V
           buf.write_byte OpT::INSERT.value

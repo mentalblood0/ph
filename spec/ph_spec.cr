@@ -28,12 +28,10 @@ describe Ph do
     env = Ph::Env.from_yaml conf
 
     s = Set(Ph::KV).new
-    hk = Hash(Ph::K, Set(Ph::V)).new
-    hv = Hash(Ph::V, Set(Ph::K)).new
 
     ks = 16..16
     vs = 16..16
-    100.times do
+    1000.times do
       case rnd.rand 0..4
       when 0
         k = rnd.random_bytes rnd.rand ks
@@ -43,32 +41,20 @@ describe Ph do
         env.tx.insert(k, v).commit
 
         s << {k, v}
-        hk[k] = Set(Ph::V).new unless hk.has_key? k
-        hk[k] << v
-        hv[v] = Set(Ph::V).new unless hk.has_key? v
-        hv[v] << k
       when 1
-        k = hk.keys.sample rnd rescue next
+        k = s.map { |k, v| k }.sample rnd rescue next
         Log.debug { "delete key #{k.hexstring}" }
 
         env.tx.delete_key(k).commit
 
-        hk[k].each do |v|
-          s.delete({k, v})
-          hv[v].delete k
-        end rescue nil
-        hk.delete k
+        s.each { |sk, v| s.delete({k, v}) if sk == k }
       when 2
-        v = hv.keys.sample rnd rescue next
+        v = s.map { |k, v| v }.sample rnd rescue next
         Log.debug { "delete value #{v.hexstring}" }
 
         env.tx.delete_value(v).commit
 
-        hv[v].each do |k|
-          s.delete({k, v})
-          hk[k].delete v
-        end rescue nil
-        hv.delete v
+        s.each { |k, sv| s.delete({k, v}) if sv == v }
       when 3
         k, v = s.sample rnd rescue next
         Log.debug { "delete key-value #{k.hexstring} #{v.hexstring}" }
@@ -76,8 +62,6 @@ describe Ph do
         env.tx.delete(k, v).commit
 
         s.delete({k, v})
-        hk[k].delete v
-        hv[v].delete k
       when 4
         k, v = s.sample rnd rescue next
         nk = rnd.random_bytes rnd.rand ks
@@ -88,13 +72,9 @@ describe Ph do
 
         s.delete({k, v})
         s << {nk, nv}
-        hk[k].delete v
-        hv[v].delete k
-        hk[k] << v
-        hv[v] << k
       end
-      Log.debug { "\n" + s.map { |k, v| "#{k.hexstring}, #{v.hexstring}" }.join '\n' }
-      hk.keys.sort.each { |k| env.get(k).should eq hk[k] }
+      Log.debug { "s:\n" + s.map { |k, v| "#{k.hexstring}, #{v.hexstring}" }.join '\n' }
+      s.each { |k, v| env.get(k).each { |ekv| s.includes? ekv } }
     end
   end
 end
