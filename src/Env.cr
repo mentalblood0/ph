@@ -208,8 +208,8 @@ module Ph
 
     getter uk : Hash(K, Hash(V, {K, V}?)?) = Hash(K, Hash(V, {K, V}?)?).new
     getter uv : Hash(V, Hash(K, {K, V}?)?) = Hash(V, Hash(K, {K, V}?)?).new
-    getter unk : Hash(K, Hash(V, {K, V})) = Hash(K, Hash(V, {K, V})).new
-    getter unv : Hash(V, Hash(K, {K, V})) = Hash(V, Hash(K, {K, V})).new
+    getter unk : Hash(K, Hash(V, Set({K, V}))) = Hash(K, Hash(V, Set({K, V}))).new
+    getter unv : Hash(V, Hash(K, Set({K, V}))) = Hash(V, Hash(K, Set({K, V}))).new
     getter ik : Hash(K, Set(V)) = Hash(K, Set(V)).new
     getter iv : Hash(V, Set(K)) = Hash(V, Set(K)).new
 
@@ -249,8 +249,8 @@ module Ph
           if nkv
             nk = nkv[0]
             nv = nkv[1]
-            @unk[nk][nv].should eq nkv
-            @unv[nv][nk].should eq nkv
+            @unk[nk][nv].should eq({k, v})
+            @unv[nv][nk].should eq({k, v})
           end
         end
       end
