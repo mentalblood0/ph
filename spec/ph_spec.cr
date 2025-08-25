@@ -36,40 +36,25 @@ describe Ph do
       when 1..50
         k = rnd.random_bytes rnd.rand ks
         v = rnd.random_bytes rnd.rand vs
-        Log.debug { "insert #{k.hexstring} #{v.hexstring}" }
-
         env.tx.insert(k, v).commit
-
         s << {k, v}
       when 51..60
         k = s.map { |k, v| k }.sample rnd rescue next
-        Log.debug { "delete key #{k.hexstring}" }
-
         env.tx.delete_key(k).commit
-
         s.each { |sk, v| s.delete({k, v}) if sk == k }
       when 61..70
         v = s.map { |k, v| v }.sample rnd rescue next
-        Log.debug { "delete value #{v.hexstring}" }
-
         env.tx.delete_value(v).commit
-
         s.each { |k, sv| s.delete({k, v}) if sv == v }
       when 71..80
         k, v = s.sample rnd rescue next
-        Log.debug { "delete key-value #{k.hexstring} #{v.hexstring}" }
-
         env.tx.delete(k, v).commit
-
         s.delete({k, v})
       when 81..100
         k, v = s.sample rnd rescue next
         nk = rnd.random_bytes rnd.rand ks
         nv = rnd.random_bytes rnd.rand vs
-        Log.debug { "update #{k.hexstring} #{v.hexstring} -> #{nk.hexstring} #{nv.hexstring}" }
-
         env.tx.update({k, v}, {nk, nv}).commit
-
         s.delete({k, v})
         s << {nk, nv}
       end

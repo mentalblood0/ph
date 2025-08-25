@@ -76,6 +76,8 @@ module Ph
         case op
         when {K, Nil}
           k = op[0].as K
+          ::Log.debug { "commit delete {#{k.hexstring}, *}" }
+
           buf.write_byte OpT::DELETE_KEY.value
           Ph.write buf, k
 
@@ -90,6 +92,8 @@ module Ph
           @env.ik.delete k
         when {Nil, V}
           v = op[1].as V
+          ::Log.debug { "commit delete {*, #{v.hexstring}}" }
+
           buf.write_byte OpT::DELETE_VALUE.value
           Ph.write buf, v
 
@@ -105,6 +109,8 @@ module Ph
         when { {K, V}, Nil }
           k = (op[0].as {K, V})[0]
           v = (op[0].as {K, V})[1]
+          ::Log.debug { "commit delete {#{k.hexstring}, #{v.hexstring}}" }
+
           buf.write_byte OpT::DELETE_KEY_VALUE.value
           Ph.write buf, k, v
           @env.uk[k] = Hash(V, {K, V}?).new unless @env.uk.has_key? k
@@ -130,6 +136,8 @@ module Ph
         when {K, V}
           k = op[0].as K
           v = op[1].as V
+          ::Log.debug { "commit insert {#{k.hexstring}, #{v.hexstring}}" }
+
           buf.write_byte OpT::INSERT.value
           Ph.write buf, k, v
 
@@ -143,6 +151,8 @@ module Ph
           v = (op[0].as {K, V})[1]
           nk = (op[1].as {K, V})[0]
           nv = (op[1].as {K, V})[1]
+          ::Log.debug { "commit update {#{k.hexstring}, #{v.hexstring}} -> {#{nk.hexstring}, #{nv.hexstring}}" }
+
           buf.write_byte OpT::UPDATE.value
           Ph.write buf, k, v
           Ph.write buf, nk, nv
@@ -181,10 +191,10 @@ module Ph
             @env.iv[v] << nk rescue nil
           end
         else
-          ::Log.debug { "#{op[0].is_a? {K, V}}" }
           raise "can not commit #{op} of type #{typeof(op)}"
         end
       end
+      ::Log.debug { "dump transaction to log" }
       @env.log.write buf.to_slice
       @env
     end
