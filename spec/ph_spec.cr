@@ -21,53 +21,54 @@ describe Ph do
 
   Spec.before_each do
     File.delete? confp["log"]["path"].as_s
-    delete confp["sst"]["path"].as_s
-  end
-
-  it "matryoshka" do
-    env = Ph::Env.from_yaml conf
-    n = 6
-    0_u8.upto(n - 1) do |i|
-      k = Bytes.new 1, i
-      v = Bytes.new 3 * (n - 1 - i)
-      env.tx.set(k, v).commit.checkpoint
-      Log.debug { "data: #{(File.read env.sst.data.path).to_slice.hexstring}" }
-      env.tx.delete(k).commit.checkpoint
-      Log.debug { "data: #{(File.read env.sst.data.path).to_slice.hexstring}" }
-    end
-    env.sst.data.size.should eq 3 * n
+    # delete confp["sst"]["path"].as_s
   end
 
   it "generative test" do
     env = Ph::Env.from_yaml conf
 
-    h = Hash(Bytes, Bytes?).new
+    s = Set(Ph::KV).new
+    hk = Hash(Ph::K, Set(Ph::V)).new
+    hv = Hash(Ph::V, Set(Ph::K)).new
 
     ks = 0..1024
     vs = 0..1024
     100.times do
-      Log.debug { "data: #{(File.read env.sst.data.path).to_slice.hexstring}" }
       case rnd.rand 0..2
       when 0
         k = rnd.random_bytes rnd.rand ks
         v = rnd.random_bytes rnd.rand vs
-        Log.debug { "add #{k.hexstring} #{v.hexstring}" }
+        Log.debug { "insert #{k.hexstring} #{v.hexstring}" }
 
-        env.tx.set(k, v).commit
+        env.tx.insert(k, v).commit
 
-        h[k] = v
+        s << {k, v}
+        hk[k] = Set(Ph::V).new unless hk.has_key? k
+        hk[k] << v
       when 1
-        k = h.keys.sample rnd rescue next
-        Log.debug { "delete #{k.hexstring}" }
+        k = hk.keys.sample rnd rescue next
+        Log.debug { "delete key #{k.hexstring}" }
 
-        env.tx.delete(k).commit
+        env.tx.delete_key(k).commit
 
-        h.delete k
+        hk[k].each do |v|
+          s.delete({k, v})
+          hv[v].delete k
+        end rescue nil
+        hk.delete k
       when 2
-        Log.debug { "checkpoint" }
-        env.checkpoint
+        v = hv.keys.sample rnd rescue next
+        Log.debug { "delete value #{v.hexstring}" }
+
+        env.tx.delete_value(v).commit
+
+        hv[v].each do |k|
+          s.delete({k, v})
+          hk[k].delete v
+        end rescue nil
+        hv.delete v
       end
-      h.keys.sort.each { |k| env.get(k).should eq h[k] }
+      hk.keys.sort.each { |k| env.get(k).should eq hk[k] }
     end
   end
 end

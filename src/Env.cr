@@ -2,7 +2,6 @@ require "yaml"
 
 require "./common.cr"
 require "./Log.cr"
-require "./Sst.cr"
 
 module Ph
   class Tx
@@ -35,7 +34,7 @@ module Ph
     end
 
     def delete_value(vs : Array(V))
-      @ops += ks.map { |v| {nil, v} }
+      @ops += vs.map { |v| {nil, v} }
       self
     end
 
@@ -83,30 +82,32 @@ module Ph
       @ops.each do |op|
         case op
         when Tuple(K, Nil)
+          k = op[0]
           buf.write_byte OpT::DELETE_KEY.value
           Ph.write buf, op[0]
 
-          @env.unk[k].as(Hash(V, KV?)).each do |v, kv|
+          @env.unk[k].as(Hash(V, KV)).each do |v, kv|
             @env.unv[v].delete k
-            @env.uk[kv[0]].delete kv[1]
-            @env.uv[kv[1]].delete kv[0]
+            @env.uk[kv[0]].not_nil!.delete kv[1] rescue nil
+            @env.uv[kv[1]].not_nil!.delete kv[0] rescue nil
           end rescue nil
           @env.unk[k] = nil
 
-          @env.ik.each { |v| iv.delete v }
+          @env.ik.each { |v| @env.iv.delete v }
           @env.ik.delete k
         when Tuple(Nil, V)
+          v = op[1]
           buf.write_byte OpT::DELETE_VALUE.value
           Ph.write buf, op[1]
 
-          @env.unv[v].as(Hash(K, KV?)).each do |k, kv|
+          @env.unv[v].as(Hash(K, KV)).each do |k, kv|
             @env.unk[k].delete v
-            @env.uk[kv[0]].delete kv[1]
-            @env.uv[kv[1]].delete kv[0]
+            @env.uk[kv[0]].not_nil!.delete kv[1] rescue nil
+            @env.uv[kv[1]].not_nil!.delete kv[0] rescue nil
           end rescue nil
           @env.unv[v] = nil
 
-          @env.iv.each { |k| ik.delete k }
+          @env.iv.each { |k| @env.ik.delete k }
           @env.iv.delete v
         when Tuple(KV, Nil)
           k = op[0][0]
@@ -134,6 +135,8 @@ module Ph
           @env.iv[v].delete k rescue nil
           @env.ik[k].delete v rescue nil
         when KV
+          k = op[0]
+          v = op[1]
           buf.write_byte OpT::INSERT.value
           Ph.write buf, *op
 
@@ -190,25 +193,27 @@ module Ph
     include YAML::Serializable::Strict
 
     getter log : Log
-    getter sst : Sst
 
     getter uk : Hash(K, Hash(V, KV?)?) = Hash(K, Hash(V, KV?)?).new
     getter uv : Hash(V, Hash(K, KV?)?) = Hash(V, Hash(K, KV?)?).new
-    getter unk : Hash(K, Hash(V, KV?)?) = Hash(K, Hash(V, KV?)?).new
-    getter unv : Hash(V, Hash(K, KV?)?) = Hash(V, Hash(K, KV?)?).new
+    getter unk : Hash(K, Hash(V, KV)) = Hash(K, Hash(V, KV)).new
+    getter unv : Hash(V, Hash(K, KV)) = Hash(V, Hash(K, KV)).new
     getter ik : Hash(K, Set(V)) = Hash(K, Set(V)).new
     getter iv : Hash(V, Set(K)) = Hash(V, Set(K)).new
 
     def after_initialize
-      @log.read { |k, v| @h[k] = v }
     end
 
     def checkpoint
-      return self if @h.empty?
+      return self if @uk.empty? && @ik.empty?
 
-      @sst.write @h
       @log.truncate
-      @h.clear
+      @uk.clear
+      @uv.clear
+      @unk.clear
+      @unv.clear
+      @ik.clear
+      @iv.clear
       self
     end
 
@@ -216,8 +221,12 @@ module Ph
       Tx.new self
     end
 
-    def get(k : K) : Array(K)
-      return @h[k] rescue @sst.get k
+    def get(k : K) : Set(V)
+      return (Set.new @unk[k].keys) rescue @ik[k] rescue Set(V).new
+    end
+
+    def has(k : K, v : V) : Bool
+      return ((unk.has_key? k) && (unk[k].has_key? v)) || ((ik.has_key? k) && (ik[k].includes? v))
     end
   end
 end
