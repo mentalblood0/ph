@@ -32,8 +32,8 @@ describe Ph do
     ks = 16..16
     vs = 16..16
     1000.times do
-      case rnd.rand 0..4
-      when 0
+      case rnd.rand 1..100
+      when 1..50
         k = rnd.random_bytes rnd.rand ks
         v = rnd.random_bytes rnd.rand vs
         Log.debug { "insert #{k.hexstring} #{v.hexstring}" }
@@ -41,28 +41,28 @@ describe Ph do
         env.tx.insert(k, v).commit
 
         s << {k, v}
-      when 1
+      when 51..60
         k = s.map { |k, v| k }.sample rnd rescue next
         Log.debug { "delete key #{k.hexstring}" }
 
         env.tx.delete_key(k).commit
 
         s.each { |sk, v| s.delete({k, v}) if sk == k }
-      when 2
+      when 61..70
         v = s.map { |k, v| v }.sample rnd rescue next
         Log.debug { "delete value #{v.hexstring}" }
 
         env.tx.delete_value(v).commit
 
         s.each { |k, sv| s.delete({k, v}) if sv == v }
-      when 3
+      when 71..80
         k, v = s.sample rnd rescue next
         Log.debug { "delete key-value #{k.hexstring} #{v.hexstring}" }
 
         env.tx.delete(k, v).commit
 
         s.delete({k, v})
-      when 4
+      when 81..100
         k, v = s.sample rnd rescue next
         nk = rnd.random_bytes rnd.rand ks
         nv = rnd.random_bytes rnd.rand vs
@@ -75,9 +75,7 @@ describe Ph do
       end
       Log.debug { "s:\n" + s.map { |k, v| "#{k.hexstring}, #{v.hexstring}" }.join '\n' }
       s.each do |k, v|
-        Log.debug { "checking #{k.hexstring} #{v.hexstring}" }
         r = env.get k
-        Log.debug { "r is #{r.map { |rv| rv.hexstring }.join ' '}" }
         (r.includes? v).should eq true
         r.each { |ekv| ekv[0] == k && s.includes? ekv }
       end
