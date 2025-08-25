@@ -85,15 +85,27 @@ module Ph
         when Tuple(K, Nil)
           buf.write_byte OpT::DELETE_KEY.value
           Ph.write buf, op[0]
-          @env.uk[k].as(Hash(V, KV?)).each { |v, kv| @env.uv[v].delete k } rescue nil
-          @env.uk[k] = nil
+
+          @env.unk[k].as(Hash(V, KV?)).each do |v, kv|
+            @env.unv[v].delete k
+            @env.uk[kv[0]].delete kv[1]
+            @env.uv[kv[1]].delete kv[0]
+          end rescue nil
+          @env.unk[k] = nil
+
           @env.ik.each { |v| iv.delete v }
           @env.ik.delete k
         when Tuple(Nil, V)
           buf.write_byte OpT::DELETE_VALUE.value
           Ph.write buf, op[1]
-          @env.uv[v].as(Hash(K, KV?)).each { |k, kv| @env.uk[k].delete v } rescue nil
-          @env.uv[v] = nil
+
+          @env.unv[v].as(Hash(K, KV?)).each do |k, kv|
+            @env.unk[k].delete v
+            @env.uk[kv[0]].delete kv[1]
+            @env.uv[kv[1]].delete kv[0]
+          end rescue nil
+          @env.unv[v] = nil
+
           @env.iv.each { |k| ik.delete k }
           @env.iv.delete v
         when Tuple(KV, Nil)
@@ -103,15 +115,31 @@ module Ph
           Ph.write buf, k, v
           @env.uk[k] = Hash(V, KV?).new unless @env.uk.has_key? k
           @env.uk[k][v] = nil
+
           @env.uv[v] = Hash(K, KV?).new unless @env.uv.has_key? v
           @env.uv[v][k] = nil
-          @env.ik[k].delete v rescue nil
+
+          @env.unk[k][v].each do |ok, ov|
+            @env.uk[ok] = Hash(V, KV?).new unless @env.uk.has_key? ok
+            @env.uk[ok][ov] = nil
+          end rescue nil
+          @env.unk[k].delete v rescue nil
+
+          @env.unv[v][k].each do |ok, ov|
+            @env.uv[ov] = Hash(K, KV?).new unless @env.uv.has_key? ov
+            @env.uv[ov][ok] = nil
+          end rescue nil
+          @env.unv[v].delete k rescue nil
+
           @env.iv[v].delete k rescue nil
+          @env.ik[k].delete v rescue nil
         when KV
           buf.write_byte OpT::INSERT.value
           Ph.write buf, *op
+
           @env.ik[k] = Set(V).new unless @env.ik.has_key? k
           @env.ik[k] << v
+
           @env.iv[v] = Set(K).new unless @env.iv.has_key? v
           @env.iv[v] << k
         when Tuple(KV, KV)
@@ -122,13 +150,31 @@ module Ph
           buf.write_byte OpT::UPDATE.value
           Ph.write buf, *op[0]
           Ph.write buf, *op[1]
+
           @env.uk[k] = Hash(V, KV?).new unless @env.uk.has_key? k
           @env.uk[k][v] = {nk, nv}
+
           @env.uv[v] = Hash(K, KV?).new unless @env.uv.has_key? v
           @env.uv[v][k] = {nv, nk}
+
+          if (@env.unk.has_key? k) && (@env.unk[k].has_key? v)
+            ok = @env.unk[k][v][0]
+            ov = @env.unk[k][v][1]
+
+            @env.unk[k].delete v
+            @env.unv[v].delete k
+
+            @env.uk[ok] = Hash(V, KV?).new unless @env.uk.has_key? ok
+            @env.uk[ok][ov] = {k, v}
+
+            @env.uv[ov] = Hash(K, KV?).new unless @env.uv.has_key? ov
+            @env.uv[ov][ok] = {v, k}
+          end
+
           if (@env.ik.has_key? k) && (@env.ik[k].includes? v)
             @env.ik[k].delete v rescue nil
             @env.ik[k] << v rescue nil
+
             @env.iv[v].delete k rescue nil
             @env.iv[v] << k rescue nil
           end
@@ -148,6 +194,8 @@ module Ph
 
     getter uk : Hash(K, Hash(V, KV?)?) = Hash(K, Hash(V, KV?)?).new
     getter uv : Hash(V, Hash(K, KV?)?) = Hash(V, Hash(K, KV?)?).new
+    getter unk : Hash(K, Hash(V, KV?)?) = Hash(K, Hash(V, KV?)?).new
+    getter unv : Hash(V, Hash(K, KV?)?) = Hash(V, Hash(K, KV?)?).new
     getter ik : Hash(K, Set(V)) = Hash(K, Set(V)).new
     getter iv : Hash(V, Set(K)) = Hash(V, Set(K)).new
 
