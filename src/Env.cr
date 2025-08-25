@@ -13,11 +13,11 @@ module Ph
       UPDATE           = 4
     end
 
-    alias Op = Tuple(K, Nil) |
-               Tuple(Nil, V) |
-               Tuple(KV, Nil) |
-               KV |
-               Tuple(KV, KV)
+    alias Op = {K, Nil} |
+               {Nil, V} |
+               {KV, Nil} |
+               {K, V} |
+               { {K, V}, {K, V} }
 
     getter ops : Array(Op) = [] of Op
 
@@ -42,38 +42,30 @@ module Ph
       delete_value [v]
     end
 
-    def delete(kvs : Array(KV))
+    def delete(kvs : Array({K, V}))
       @ops += kvs.map { |kv| {kv, nil} }
       self
-    end
-
-    def delete(kv : KV)
-      delete [kv]
     end
 
     def delete(k : K, v : V)
       delete({k, v})
     end
 
-    def insert(kvs : Array(KV))
+    def insert(kvs : Array({K, V}))
       @ops += kvs
       self
     end
 
-    def insert(kv : KV)
-      insert [kv]
-    end
-
     def insert(k : K, v : V)
-      insert({k, v})
+      insert [{k, v}]
     end
 
-    def update(us : Hash(KV, KV))
+    def update(us : Hash({K, V}, {K, V}))
       @ops += us.map { |o, n| {o, n} }
       self
     end
 
-    def update(o : KV, n : KV)
+    def update(o : {K, V}, n : {K, V})
       update({o => n})
     end
 
@@ -81,84 +73,85 @@ module Ph
       buf = IO::Memory.new
       @ops.each do |op|
         case op
-        when Tuple(K, Nil)
-          k = op[0]
+        when {K, Nil}
+          k = op[0].as K
           buf.write_byte OpT::DELETE_KEY.value
-          Ph.write buf, op[0]
+          Ph.write buf, k
 
-          @env.unk[k].as(Hash(V, KV)).each do |v, kv|
+          @env.unk[k].as(Hash(V, {K, V})).each do |v, kv|
             @env.unv[v].delete k
             @env.uk[kv[0]].not_nil!.delete kv[1] rescue nil
             @env.uv[kv[1]].not_nil!.delete kv[0] rescue nil
           end rescue nil
-          @env.unk[k] = nil
+          @env.unk.delete k
 
           @env.ik.each { |v| @env.iv.delete v }
           @env.ik.delete k
-        when Tuple(Nil, V)
-          v = op[1]
+        when {Nil, V}
+          v = op[1].as V
           buf.write_byte OpT::DELETE_VALUE.value
-          Ph.write buf, op[1]
+          Ph.write buf, v
 
           @env.unv[v].as(Hash(K, KV)).each do |k, kv|
             @env.unk[k].delete v
             @env.uk[kv[0]].not_nil!.delete kv[1] rescue nil
             @env.uv[kv[1]].not_nil!.delete kv[0] rescue nil
           end rescue nil
-          @env.unv[v] = nil
+          @env.unv.delete v
 
           @env.iv.each { |k| @env.ik.delete k }
           @env.iv.delete v
-        when Tuple(KV, Nil)
-          k = op[0][0]
-          v = op[0][1]
+        when {KV, Nil}
+          k = (op[0].as KV)[0]
+          v = (op[0].as KV)[1]
           buf.write_byte OpT::DELETE_KEY_VALUE.value
           Ph.write buf, k, v
           @env.uk[k] = Hash(V, KV?).new unless @env.uk.has_key? k
-          @env.uk[k][v] = nil
+          @env.uk[k].not_nil![v] = nil
 
           @env.uv[v] = Hash(K, KV?).new unless @env.uv.has_key? v
-          @env.uv[v][k] = nil
+          @env.uv[v].not_nil![k] = nil
 
-          @env.unk[k][v].each do |ok, ov|
+          if (@env.unk.has_key? k) && (@env.unk[k].has_key? v)
+            ok, ov = @env.unk[k][v]
+
             @env.uk[ok] = Hash(V, KV?).new unless @env.uk.has_key? ok
-            @env.uk[ok][ov] = nil
-          end rescue nil
-          @env.unk[k].delete v rescue nil
+            @env.uk[ok].not_nil![ov] = nil
+            @env.unk[k].not_nil!.delete v rescue nil
 
-          @env.unv[v][k].each do |ok, ov|
             @env.uv[ov] = Hash(K, KV?).new unless @env.uv.has_key? ov
-            @env.uv[ov][ok] = nil
-          end rescue nil
-          @env.unv[v].delete k rescue nil
+            @env.uv[ov].not_nil![ok] = nil
+            @env.unv[v].not_nil!.delete k rescue nil
+          end
 
           @env.iv[v].delete k rescue nil
           @env.ik[k].delete v rescue nil
-        when KV
-          k = op[0]
-          v = op[1]
+        when {K, V}
+          ::Log.debug { "commit insert" }
+          k = op[0].as K
+          v = op[1].as V
           buf.write_byte OpT::INSERT.value
-          Ph.write buf, *op
+          Ph.write buf, k, v
 
           @env.ik[k] = Set(V).new unless @env.ik.has_key? k
           @env.ik[k] << v
 
           @env.iv[v] = Set(K).new unless @env.iv.has_key? v
           @env.iv[v] << k
-        when Tuple(KV, KV)
-          k = op[0][0]
-          v = op[0][1]
-          nk = op[1][0]
-          nv = op[1][1]
+        when { {K, V}, {K, V} }
+          k = (op[0].as {K, V})[0]
+          v = (op[0].as {K, V})[1]
+          nk = (op[1].as {K, V})[0]
+          nv = (op[1].as {K, V})[1]
           buf.write_byte OpT::UPDATE.value
-          Ph.write buf, *op[0]
-          Ph.write buf, *op[1]
+          Ph.write buf, k, v
+          Ph.write buf, nk, nv
 
           @env.uk[k] = Hash(V, KV?).new unless @env.uk.has_key? k
-          @env.uk[k][v] = {nk, nv}
+          @env.uk[k].not_nil![v] = {nk, nv}
 
           @env.uv[v] = Hash(K, KV?).new unless @env.uv.has_key? v
-          @env.uv[v][k] = {nv, nk}
+          @env.uv[v].not_nil![k] = {nv, nk}
 
           if (@env.unk.has_key? k) && (@env.unk[k].has_key? v)
             ok = @env.unk[k][v][0]
@@ -168,10 +161,10 @@ module Ph
             @env.unv[v].delete k
 
             @env.uk[ok] = Hash(V, KV?).new unless @env.uk.has_key? ok
-            @env.uk[ok][ov] = {k, v}
+            @env.uk[ok].not_nil![ov] = {k, v}
 
             @env.uv[ov] = Hash(K, KV?).new unless @env.uv.has_key? ov
-            @env.uv[ov][ok] = {v, k}
+            @env.uv[ov].not_nil![ok] = {v, k}
           end
 
           if (@env.ik.has_key? k) && (@env.ik[k].includes? v)
@@ -181,6 +174,9 @@ module Ph
             @env.iv[v].delete k rescue nil
             @env.iv[v] << nk rescue nil
           end
+        else
+          ::Log.debug { "#{op[0].is_a? KV}" }
+          raise "can not commit #{op} of type #{typeof(op)}"
         end
       end
       @env.log.write buf.to_slice
@@ -194,10 +190,10 @@ module Ph
 
     getter log : Log
 
-    getter uk : Hash(K, Hash(V, KV?)?) = Hash(K, Hash(V, KV?)?).new
-    getter uv : Hash(V, Hash(K, KV?)?) = Hash(V, Hash(K, KV?)?).new
-    getter unk : Hash(K, Hash(V, KV)) = Hash(K, Hash(V, KV)).new
-    getter unv : Hash(V, Hash(K, KV)) = Hash(V, Hash(K, KV)).new
+    getter uk : Hash(K, Hash(V, {K, V}?)?) = Hash(K, Hash(V, {K, V}?)?).new
+    getter uv : Hash(V, Hash(K, {K, V}?)?) = Hash(V, Hash(K, {K, V}?)?).new
+    getter unk : Hash(K, Hash(V, {K, V})) = Hash(K, Hash(V, {K, V})).new
+    getter unv : Hash(V, Hash(K, {K, V})) = Hash(V, Hash(K, {K, V})).new
     getter ik : Hash(K, Set(V)) = Hash(K, Set(V)).new
     getter iv : Hash(V, Set(K)) = Hash(V, Set(K)).new
 

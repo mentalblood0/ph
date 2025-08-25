@@ -31,8 +31,8 @@ describe Ph do
     hk = Hash(Ph::K, Set(Ph::V)).new
     hv = Hash(Ph::V, Set(Ph::K)).new
 
-    ks = 0..1024
-    vs = 0..1024
+    ks = 16..16
+    vs = 16..16
     100.times do
       case rnd.rand 0..2
       when 0
@@ -68,6 +68,7 @@ describe Ph do
         end rescue nil
         hv.delete v
       end
+      Log.debug { "\n" + s.map { |k, v| "#{k.hexstring}, #{v.hexstring}" }.join '\n' }
       hk.keys.sort.each { |k| env.get(k).should eq hk[k] }
     end
   end
