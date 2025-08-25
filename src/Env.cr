@@ -173,10 +173,10 @@ module Ph
 
           if (@env.ik.has_key? k) && (@env.ik[k].includes? v)
             @env.ik[k].delete v rescue nil
-            @env.ik[k] << v rescue nil
+            @env.ik[k] << nv rescue nil
 
             @env.iv[v].delete k rescue nil
-            @env.iv[v] << k rescue nil
+            @env.iv[v] << nk rescue nil
           end
         end
       end
