@@ -15,7 +15,7 @@ module Ph
 
     alias Op = {K, Nil} |
                {Nil, V} |
-               {KV, Nil} |
+               { {K, V}, Nil } |
                {K, V} |
                { {K, V}, {K, V} }
 
@@ -92,7 +92,7 @@ module Ph
           buf.write_byte OpT::DELETE_VALUE.value
           Ph.write buf, v
 
-          @env.unv[v].as(Hash(K, KV)).each do |k, kv|
+          @env.unv[v].as(Hash(K, {K, V})).each do |k, kv|
             @env.unk[k].delete v
             @env.uk[kv[0]].not_nil!.delete kv[1] rescue nil
             @env.uv[kv[1]].not_nil!.delete kv[0] rescue nil
@@ -101,25 +101,25 @@ module Ph
 
           @env.iv.each { |k| @env.ik.delete k }
           @env.iv.delete v
-        when {KV, Nil}
-          k = (op[0].as KV)[0]
-          v = (op[0].as KV)[1]
+        when { {K, V}, Nil }
+          k = (op[0].as {K, V})[0]
+          v = (op[0].as {K, V})[1]
           buf.write_byte OpT::DELETE_KEY_VALUE.value
           Ph.write buf, k, v
-          @env.uk[k] = Hash(V, KV?).new unless @env.uk.has_key? k
+          @env.uk[k] = Hash(V, {K, V}?).new unless @env.uk.has_key? k
           @env.uk[k].not_nil![v] = nil
 
-          @env.uv[v] = Hash(K, KV?).new unless @env.uv.has_key? v
+          @env.uv[v] = Hash(K, {K, V}?).new unless @env.uv.has_key? v
           @env.uv[v].not_nil![k] = nil
 
           if (@env.unk.has_key? k) && (@env.unk[k].has_key? v)
             ok, ov = @env.unk[k][v]
 
-            @env.uk[ok] = Hash(V, KV?).new unless @env.uk.has_key? ok
+            @env.uk[ok] = Hash(V, {K, V}?).new unless @env.uk.has_key? ok
             @env.uk[ok].not_nil![ov] = nil
             @env.unk[k].not_nil!.delete v rescue nil
 
-            @env.uv[ov] = Hash(K, KV?).new unless @env.uv.has_key? ov
+            @env.uv[ov] = Hash(K, {K, V}?).new unless @env.uv.has_key? ov
             @env.uv[ov].not_nil![ok] = nil
             @env.unv[v].not_nil!.delete k rescue nil
           end
@@ -146,11 +146,17 @@ module Ph
           Ph.write buf, k, v
           Ph.write buf, nk, nv
 
-          @env.uk[k] = Hash(V, KV?).new unless @env.uk.has_key? k
+          @env.uk[k] = Hash(V, {K, V}?).new unless @env.uk.has_key? k
           @env.uk[k].not_nil![v] = {nk, nv}
 
-          @env.uv[v] = Hash(K, KV?).new unless @env.uv.has_key? v
+          @env.uv[v] = Hash(K, {K, V}?).new unless @env.uv.has_key? v
           @env.uv[v].not_nil![k] = {nv, nk}
+
+          @env.unk[nk] = Hash(V, {K, V}).new unless @env.uk.has_key? nk
+          @env.unk[nk].not_nil![nv] = {k, v}
+
+          @env.unv[nv] = Hash(K, {K, V}).new unless @env.uv.has_key? nv
+          @env.unv[nv].not_nil![nk] = {v, k}
 
           if (@env.unk.has_key? k) && (@env.unk[k].has_key? v)
             ok = @env.unk[k][v][0]
@@ -159,10 +165,10 @@ module Ph
             @env.unk[k].delete v
             @env.unv[v].delete k
 
-            @env.uk[ok] = Hash(V, KV?).new unless @env.uk.has_key? ok
+            @env.uk[ok] = Hash(V, {K, V}?).new unless @env.uk.has_key? ok
             @env.uk[ok].not_nil![ov] = {k, v}
 
-            @env.uv[ov] = Hash(K, KV?).new unless @env.uv.has_key? ov
+            @env.uv[ov] = Hash(K, {K, V}?).new unless @env.uv.has_key? ov
             @env.uv[ov].not_nil![ok] = {v, k}
           end
 
@@ -174,7 +180,7 @@ module Ph
             @env.iv[v] << nk rescue nil
           end
         else
-          ::Log.debug { "#{op[0].is_a? KV}" }
+          ::Log.debug { "#{op[0].is_a? {K, V}}" }
           raise "can not commit #{op} of type #{typeof(op)}"
         end
       end

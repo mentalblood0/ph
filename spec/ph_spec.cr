@@ -74,7 +74,13 @@ describe Ph do
         s << {nk, nv}
       end
       Log.debug { "s:\n" + s.map { |k, v| "#{k.hexstring}, #{v.hexstring}" }.join '\n' }
-      s.each { |k, v| env.get(k).each { |ekv| s.includes? ekv } }
+      s.each do |k, v|
+        Log.debug { "checking #{k.hexstring} #{v.hexstring}" }
+        r = env.get k
+        Log.debug { "r is #{r.map { |rv| rv.hexstring }.join ' '}" }
+        (r.includes? v).should eq true
+        r.each { |ekv| ekv[0] == k && s.includes? ekv }
+      end
     end
   end
 end
