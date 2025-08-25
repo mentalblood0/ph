@@ -226,7 +226,7 @@ module Ph
       return (Set.new @unk[k].keys) rescue @ik[k] rescue Set(V).new
     end
 
-    def has(k : K, v : V) : Bool
+    def has?(k : K, v : V) : Bool
       return ((unk.has_key? k) && (unk[k].has_key? v)) || ((ik.has_key? k) && (ik[k].includes? v))
     end
   end
