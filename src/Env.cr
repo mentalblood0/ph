@@ -48,7 +48,7 @@ module Ph
     end
 
     def delete(k : K, v : V)
-      delete({k, v})
+      delete([{k, v}])
     end
 
     def insert(kvs : Array({K, V}))

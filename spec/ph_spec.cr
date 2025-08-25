@@ -34,7 +34,7 @@ describe Ph do
     ks = 16..16
     vs = 16..16
     100.times do
-      case rnd.rand 0..2
+      case rnd.rand 0..4
       when 0
         k = rnd.random_bytes rnd.rand ks
         v = rnd.random_bytes rnd.rand vs
@@ -45,6 +45,8 @@ describe Ph do
         s << {k, v}
         hk[k] = Set(Ph::V).new unless hk.has_key? k
         hk[k] << v
+        hv[v] = Set(Ph::V).new unless hk.has_key? v
+        hv[v] << k
       when 1
         k = hk.keys.sample rnd rescue next
         Log.debug { "delete key #{k.hexstring}" }
@@ -67,6 +69,29 @@ describe Ph do
           hk[k].delete v
         end rescue nil
         hv.delete v
+      when 3
+        k, v = s.sample rnd rescue next
+        Log.debug { "delete key-value #{k.hexstring} #{v.hexstring}" }
+
+        env.tx.delete(k, v).commit
+
+        s.delete({k, v})
+        hk[k].delete v
+        hv[v].delete k
+      when 4
+        k, v = s.sample rnd rescue next
+        nk = rnd.random_bytes rnd.rand ks
+        nv = rnd.random_bytes rnd.rand vs
+        Log.debug { "update #{k.hexstring} #{v.hexstring} -> #{nk.hexstring} #{nv.hexstring}" }
+
+        env.tx.update({k, v}, {nk, nv}).commit
+
+        s.delete({k, v})
+        s << {nk, nv}
+        hk[k].delete v
+        hv[v].delete k
+        hk[k] << v
+        hv[v] << k
       end
       Log.debug { "\n" + s.map { |k, v| "#{k.hexstring}, #{v.hexstring}" }.join '\n' }
       hk.keys.sort.each { |k| env.get(k).should eq hk[k] }
