@@ -90,7 +90,7 @@ module Ph
           end rescue nil
           @env.unk.delete k
 
-          @env.ik.each { |v| @env.iv.delete v }
+          @env.ik[k].each { |v| @env.iv.delete v }
           @env.ik.delete k
         when {Nil, V}
           v = op[1].as V
@@ -108,7 +108,7 @@ module Ph
           end rescue nil
           @env.unv.delete v
 
-          @env.iv.each { |k| @env.ik.delete k }
+          @env.iv[v].each { |k| @env.ik.delete k }
           @env.iv.delete v
         when { {K, V}, Nil }
           k, v = op[0].as {K, V}
@@ -184,10 +184,12 @@ module Ph
 
           if (@env.ik.has_key? k) && (@env.ik[k].includes? v)
             @env.ik[k].delete v
-            @env.ik[k] << nv
+            @env.ik[nk] = Set(V).new unless @env.ik.has_key? nk
+            @env.ik[nk] << nv
 
             @env.iv[v].delete k
-            @env.iv[v] << nk
+            @env.iv[nv] = Set(K).new unless @env.iv.has_key? nv
+            @env.iv[nv] << nk
           end
         else
           raise "can not commit #{op} of type #{typeof(op)}"
