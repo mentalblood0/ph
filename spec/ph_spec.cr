@@ -32,7 +32,7 @@ describe Ph do
     ks = 16..16
     vs = 16..16
     1000.times do
-      case rnd.rand 1..100
+      case rnd.rand 1..80
       when 1..50
         k = rnd.random_bytes rnd.rand ks
         v = rnd.random_bytes rnd.rand vs
@@ -46,17 +46,10 @@ describe Ph do
         v = s.map { |_, v| v }.sample rnd rescue next
         env.tx.delete_value(v).commit
         s.each { |k, sv| s.delete({k, v}) if sv == v }
-      when 71..80
+      when 71..100
         k, v = s.sample rnd rescue next
         env.tx.delete(k, v).commit
         s.delete({k, v})
-      when 81..100
-        k, v = s.sample rnd rescue next
-        nk = rnd.random_bytes rnd.rand ks
-        nv = rnd.random_bytes rnd.rand vs
-        env.tx.update({k, v}, {nk, nv}).commit
-        s.delete({k, v})
-        s << {nk, nv}
       end
       # Log.debug { "s:\n" + s.map { |k, v| " " * 37 + "[#{k.hexstring}, #{v.hexstring}]" }.sort.join '\n' }
       env.check_integrity
@@ -68,10 +61,6 @@ describe Ph do
       end
     end
     renv = Ph::Env.from_yaml conf
-    renv.uk.should eq env.uk
-    renv.uv.should eq env.uv
-    renv.unk.should eq env.unk
-    renv.unv.should eq env.unv
     renv.ik.should eq env.ik
     renv.iv.should eq env.iv
     renv.dK.should eq env.dK

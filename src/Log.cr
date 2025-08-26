@@ -34,12 +34,6 @@ module Ph
             k = (Ph.read f).as K
             v = (Ph.read f).as V
             yield({k, v})
-          when OpT::UPDATE
-            k = (Ph.read f).as K
-            v = (Ph.read f).as V
-            nk = (Ph.read f).as K
-            nv = (Ph.read f).as V
-            yield({ {k, v}, {nk, nv} })
           else
             raise "can not recover operation of type #{opt}"
           end
@@ -67,12 +61,6 @@ module Ph
           k, v = op[0].as(K), op[1].as(V)
           buf.write_byte OpT::INSERT.value
           Ph.write buf, k, v
-        when { {K, V}, {K, V} }
-          k, v = op[0].as {K, V}
-          nk, nv = op[1].as {K, V}
-          buf.write_byte OpT::UPDATE.value
-          Ph.write buf, k, v
-          Ph.write buf, nk, nv
         else
           raise "can not commit #{op} of type #{typeof(op)}"
         end

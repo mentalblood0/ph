@@ -10,14 +10,12 @@ module Ph
     DELETE_VALUE     = 1
     DELETE_KEY_VALUE = 2
     INSERT           = 3
-    UPDATE           = 4
   end
 
   alias Op = {K, Nil} |
              {Nil, V} |
              { {K, V}, Nil } |
-             {K, V} |
-             { {K, V}, {K, V} }
+             {K, V}
 
   class Tx
     getter ops : Array(Op) = [] of Op
@@ -61,15 +59,6 @@ module Ph
       insert [{k, v}]
     end
 
-    def update(us : Hash({K, V}, {K, V}))
-      @ops += us.map { |o, n| {o, n} }
-      self
-    end
-
-    def update(o : {K, V}, n : {K, V})
-      update({o => n})
-    end
-
     def commit
       @env.log.write @ops
       @ops.each { |op| @env.register op }
@@ -83,10 +72,6 @@ module Ph
 
     getter log : Log
 
-    getter uk = Hash(K, Hash(V, {K, V}?)?).new
-    getter uv = Hash(V, Hash(K, {K, V}?)?).new
-    getter unk = Hash(K, Hash(V, Set({K, V}))).new
-    getter unv = Hash(V, Hash(K, Set({K, V}))).new
     getter ik = Hash(K, Set(V)).new
     getter iv = Hash(V, Set(K)).new
     getter dK = Set(K).new
@@ -107,15 +92,6 @@ module Ph
 
         @dK << k
 
-        @unk[k].each do |v, kvs|
-          @unv[v].delete k
-          kvs.each do |kv|
-            @uk[kv[0]].not_nil!.delete kv[1]
-            @uv[kv[1]].not_nil!.delete kv[0]
-          end
-        end rescue nil
-        @unk.delete k
-
         @ik[k].each { |v| @iv.delete v }
         @ik.delete k
       when {Nil, V}
@@ -123,15 +99,6 @@ module Ph
         ::Log.debug { "register delete\n" + " " * 53 + "[*, #{v.hexstring}]" }
 
         @dV << v
-
-        @unv[v].each do |k, kvs|
-          @unk[k].delete v
-          kvs.each do |kv|
-            @uk[kv[0]].not_nil!.delete kv[1]
-            @uv[kv[1]].not_nil!.delete kv[0]
-          end
-        end rescue nil
-        @unv.delete v
 
         @iv[v].each { |k| @ik.delete k }
         @iv.delete v
@@ -147,24 +114,6 @@ module Ph
           @dv[v] << k
         end
 
-        @uk[k] = Hash(V, {K, V}?).new unless @uk.has_key? k
-        @uk[k].not_nil![v] = nil
-
-        @uv[v] = Hash(K, {K, V}?).new unless @uv.has_key? v
-        @uv[v].not_nil![k] = nil
-
-        if (@unk.has_key? k) && (@unk[k].has_key? v)
-          @unk[k][v].each do |ok, ov|
-            @uk[ok] = Hash(V, {K, V}?).new unless @uk.has_key? ok
-            @uk[ok].not_nil![ov] = nil
-            @unk[k].not_nil!.delete v rescue nil
-
-            @uv[ov] = Hash(K, {K, V}?).new unless @uv.has_key? ov
-            @uv[ov].not_nil![ok] = nil
-            @unv[v].not_nil!.delete k rescue nil
-          end
-        end
-
         @iv[v].delete k rescue nil
         @ik[k].delete v rescue nil
       when {K, V}
@@ -176,58 +125,15 @@ module Ph
 
         @iv[v] = Set(K).new unless @iv.has_key? v
         @iv[v] << k
-      when { {K, V}, {K, V} }
-        k, v = op[0].as {K, V}
-        nk, nv = op[1].as {K, V}
-        ::Log.debug { "register update\n" + " " * 53 + "[#{k.hexstring}, #{v.hexstring}] ->\n" + " " * 53 + "[#{nk.hexstring}, #{nv.hexstring}]" }
-
-        @uk[k] = Hash(V, {K, V}?).new unless @uk.has_key? k
-        @uk[k].not_nil![v] = {nk, nv}
-
-        @uv[v] = Hash(K, {K, V}?).new unless @uv.has_key? v
-        @uv[v].not_nil![k] = {nk, nv}
-
-        @unk[nk] = Hash(V, Set({K, V})).new unless @unk.has_key? nk
-        @unk[nk].not_nil![nv] = Set({K, V}).new unless @unk[nk].has_key? nv
-        @unk[nk].not_nil![nv] << {k, v}
-
-        @unv[nv] = Hash(K, Set({K, V})).new unless @unv.has_key? nv
-        @unv[nv].not_nil![nk] = Set({K, V}).new unless @unv[nv].has_key? nk
-        @unv[nv].not_nil![nk] << {k, v}
-
-        if (@unk.has_key? k) && (@unk[k].has_key? v)
-          @unk[k][v].each do |ok, ov|
-            @uk[ok].not_nil![ov] = {nk, nv}
-            @uv[ov].not_nil![ok] = {nk, nv}
-            @unk[nk][nv] << {ok, ov}
-            @unv[nv][nk] << {ok, ov}
-          end
-          @unk[k].delete v
-          @unv[v].delete k
-        end
-
-        if (@ik.has_key? k) && (@ik[k].includes? v)
-          @ik[k].delete v
-          @ik[nk] = Set(V).new unless @ik.has_key? nk
-          @ik[nk] << nv
-
-          @iv[v].delete k
-          @iv[nv] = Set(K).new unless @iv.has_key? nv
-          @iv[nv] << nk
-        end
       else
         raise "can not commit #{op} of type #{typeof(op)}"
       end
     end
 
     def checkpoint
-      return self if @uk.empty? && @ik.empty? && @dK.empty? && @dV.empty? && @dv.empty?
+      return self if @ik.empty? && @dK.empty? && @dV.empty? && @dv.empty?
 
       @log.truncate
-      @uk.clear
-      @uv.clear
-      @unk.clear
-      @unv.clear
       @ik.clear
       @iv.clear
       @dK.clear
@@ -242,25 +148,14 @@ module Ph
     end
 
     def get(k : K) : Set(V)
-      return (Set.new @unk[k].keys) rescue @ik[k] rescue Set(V).new
+      return @ik[k] rescue Set(V).new
     end
 
     def has?(k : K, v : V) : Bool
-      return ((unk.has_key? k) && (unk[k].has_key? v)) || ((ik.has_key? k) && (ik[k].includes? v))
+      return (ik.has_key? k) && (ik[k].includes? v)
     end
 
     def check_integrity
-      @uk.each do |k, vkv|
-        next unless vkv
-        vkv.each do |v, nkv|
-          @uv[v].not_nil![k].should eq nkv
-          if nkv
-            nk, nv = nkv
-            @unk[nk][nv].includes?({k, v}).should eq true
-            @unv[nv][nk].includes?({k, v}).should eq true
-          end
-        end
-      end
       @ik.each { |k, vs| vs.each { |v| (@iv[v]? && @iv[v].includes? k).should eq true } }
     end
   end
