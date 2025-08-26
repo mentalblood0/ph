@@ -213,6 +213,32 @@ module Ph
     getter unv = Hash(V, Hash(K, Set({K, V}))).new
     getter ik = Hash(K, Set(V)).new
     getter iv = Hash(V, Set(K)).new
+    getter dK = Set(K).new
+    getter dV = Set(V).new
+    getter dk = Hash(K, Set(V)?).new
+    getter dv = Hash(V, Set(K)?).new
+
+    # Q: How to register the last delete?
+    # delete [k, *]
+    # insert [k, v]
+    # insert [a, b]
+    # delete [k, v]
+    # A: use dK and dV for [k, *] and [*, v] deletes registration
+    #
+    # Q: How to register the last delete?
+    # delete [k, *]
+    # insert [k, v]
+    # delete [k, *]
+    # A: it is registered by deregistration of insert
+    #
+    # How to distinguish
+    # delete [k, *]
+    # insert [k, v]
+    # from
+    # insert [k, v]
+    # delete [k, *]
+    # ?
+    # A: delete-insert will preserve inserted data in ik/iv, so when checkpointing do delete first and insert next
 
     def after_initialize
     end
@@ -227,6 +253,10 @@ module Ph
       @unv.clear
       @ik.clear
       @iv.clear
+      @dK.clear
+      @dV.clear
+      @dk.clear
+      @dv.clear
       self
     end
 
