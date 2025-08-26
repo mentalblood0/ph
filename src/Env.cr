@@ -118,11 +118,13 @@ module Ph
           k, v = op[0].as {K, V}
           ::Log.debug { "commit delete\n" + " " * 37 + "[#{k.hexstring}, #{v.hexstring}]" }
 
-          @env.dk[k] = Set(V).new unless @env.dk.has_key? k
-          @env.dk[k] << v
+          unless (@env.dK.includes? k) || (@env.dV.includes? v)
+            @env.dk[k] = Set(V).new unless @env.dk.has_key? k
+            @env.dk[k] << v
 
-          @env.dv[v] = Set(K).new unless @env.dv.has_key? v
-          @env.dv[v] << k
+            @env.dv[v] = Set(K).new unless @env.dv.has_key? v
+            @env.dv[v] << k
+          end
 
           buf.write_byte OpT::DELETE_KEY_VALUE.value
           Ph.write buf, k, v
