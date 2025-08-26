@@ -80,7 +80,6 @@ module Ph
 
   def self.read(io : IO) : Block
     first = io.read_byte.not_nil! rescue raise IO::EOFError.new
-    ::Log.debug { "read first = #{first.to_s 16}" }
     return nil if first == Header::NIL.value
 
     size = (first & 0b00001111_u8).to_u32!

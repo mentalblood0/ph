@@ -71,38 +71,8 @@ module Ph
     end
 
     def commit
-      buf = IO::Memory.new
-      @ops.each do |op|
-        case op
-        when {K, Nil}
-          k = op[0].as K
-          buf.write_byte OpT::DELETE_KEY.value
-          Ph.write buf, k
-        when {Nil, V}
-          v = op[1].as V
-          buf.write_byte OpT::DELETE_VALUE.value
-          Ph.write buf, v
-        when { {K, V}, Nil }
-          k, v = op[0].as {K, V}
-          buf.write_byte OpT::DELETE_KEY_VALUE.value
-          Ph.write buf, k, v
-        when {K, V}
-          k, v = op[0].as(K), op[1].as(V)
-          buf.write_byte OpT::INSERT.value
-          Ph.write buf, k, v
-        when { {K, V}, {K, V} }
-          k, v = op[0].as {K, V}
-          nk, nv = op[1].as {K, V}
-          buf.write_byte OpT::UPDATE.value
-          Ph.write buf, k, v
-          Ph.write buf, nk, nv
-        else
-          raise "can not commit #{op} of type #{typeof(op)}"
-        end
-        @env.register op
-      end
-      ::Log.debug { "dump transaction to log" }
-      @env.log.write buf.to_slice
+      @env.log.write @ops
+      @ops.each { |op| @env.register op }
       @env
     end
   end
@@ -124,11 +94,16 @@ module Ph
     getter dk = Hash(K, Set(V)).new
     getter dv = Hash(V, Set(K)).new
 
+    def after_initialize
+      ::Log.debug { "recover" }
+      log.read { |op| register op }
+    end
+
     def register(op : Op)
       case op
       when {K, Nil}
         k = op[0].as K
-        ::Log.debug { "register delete\n" + " " * 37 + "[#{k.hexstring}, *]" }
+        ::Log.debug { "register delete\n" + " " * 53 + "[#{k.hexstring}, *]" }
 
         @dK << k
 
@@ -145,7 +120,7 @@ module Ph
         @ik.delete k
       when {Nil, V}
         v = op[1].as V
-        ::Log.debug { "register delete\n" + " " * 37 + "[*, #{v.hexstring}]" }
+        ::Log.debug { "register delete\n" + " " * 53 + "[*, #{v.hexstring}]" }
 
         @dV << v
 
@@ -162,7 +137,7 @@ module Ph
         @iv.delete v
       when { {K, V}, Nil }
         k, v = op[0].as {K, V}
-        ::Log.debug { "register delete\n" + " " * 37 + "[#{k.hexstring}, #{v.hexstring}]" }
+        ::Log.debug { "register delete\n" + " " * 53 + "[#{k.hexstring}, #{v.hexstring}]" }
 
         unless (@dK.includes? k) || (@dV.includes? v)
           @dk[k] = Set(V).new unless @dk.has_key? k
@@ -194,7 +169,7 @@ module Ph
         @ik[k].delete v rescue nil
       when {K, V}
         k, v = op[0].as(K), op[1].as(V)
-        ::Log.debug { "register insert\n" + " " * 37 + "[#{k.hexstring}, #{v.hexstring}]" }
+        ::Log.debug { "register insert\n" + " " * 53 + "[#{k.hexstring}, #{v.hexstring}]" }
 
         @ik[k] = Set(V).new unless @ik.has_key? k
         @ik[k] << v
@@ -204,7 +179,7 @@ module Ph
       when { {K, V}, {K, V} }
         k, v = op[0].as {K, V}
         nk, nv = op[1].as {K, V}
-        ::Log.debug { "register update\n" + " " * 37 + "[#{k.hexstring}, #{v.hexstring}] ->\n" + " " * 37 + "[#{nk.hexstring}, #{nv.hexstring}]" }
+        ::Log.debug { "register update\n" + " " * 53 + "[#{k.hexstring}, #{v.hexstring}] ->\n" + " " * 53 + "[#{nk.hexstring}, #{nv.hexstring}]" }
 
         @uk[k] = Hash(V, {K, V}?).new unless @uk.has_key? k
         @uk[k].not_nil![v] = {nk, nv}
@@ -245,11 +220,8 @@ module Ph
       end
     end
 
-    def after_initialize
-    end
-
     def checkpoint
-      return self if @uk.empty? && @ik.empty?
+      return self if @uk.empty? && @ik.empty? && @dK.empty? && @dV.empty? && @dv.empty?
 
       @log.truncate
       @uk.clear

@@ -19,19 +19,66 @@ module Ph
     def read(&)
       File.open @f.path do |f|
         loop do
-          begin
-            k = (Ph.read f).as Bytes
-            v = (Ph.read f).as Bytes?
+          case (opt = OpT.new f.read_byte.not_nil! rescue break)
+          when OpT::DELETE_KEY
+            k = (Ph.read f).as K
+            yield({k, nil})
+          when OpT::DELETE_VALUE
+            v = (Ph.read f).as V
+            yield({nil, v})
+          when OpT::DELETE_KEY_VALUE
+            k = (Ph.read f).as K
+            v = (Ph.read f).as V
+            yield({ {k, v}, nil })
+          when OpT::INSERT
+            k = (Ph.read f).as K
+            v = (Ph.read f).as V
             yield({k, v})
-          rescue IO::EOFError
-            break
+          when OpT::UPDATE
+            k = (Ph.read f).as K
+            v = (Ph.read f).as V
+            nk = (Ph.read f).as K
+            nv = (Ph.read f).as V
+            yield({ {k, v}, {nk, nv} })
+          else
+            raise "can not recover operation of type #{opt}"
           end
         end
       end
     end
 
-    def write(b : Bytes)
-      @f.write b
+    def write(ops : Array(Op))
+      buf = IO::Memory.new
+      ops.each do |op|
+        case op
+        when {K, Nil}
+          k = op[0].as K
+          buf.write_byte OpT::DELETE_KEY.value
+          Ph.write buf, k
+        when {Nil, V}
+          v = op[1].as V
+          buf.write_byte OpT::DELETE_VALUE.value
+          Ph.write buf, v
+        when { {K, V}, Nil }
+          k, v = op[0].as {K, V}
+          buf.write_byte OpT::DELETE_KEY_VALUE.value
+          Ph.write buf, k, v
+        when {K, V}
+          k, v = op[0].as(K), op[1].as(V)
+          buf.write_byte OpT::INSERT.value
+          Ph.write buf, k, v
+        when { {K, V}, {K, V} }
+          k, v = op[0].as {K, V}
+          nk, nv = op[1].as {K, V}
+          buf.write_byte OpT::UPDATE.value
+          Ph.write buf, k, v
+          Ph.write buf, nk, nv
+        else
+          raise "can not commit #{op} of type #{typeof(op)}"
+        end
+      end
+      ::Log.debug { "dump transaction to log" }
+      @f.write buf.to_slice
     end
 
     def truncate

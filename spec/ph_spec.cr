@@ -39,11 +39,11 @@ describe Ph do
         env.tx.insert(k, v).commit
         s << {k, v}
       when 51..60
-        k = s.map { |k, v| k }.sample rnd rescue next
+        k = s.map { |k, _| k }.sample rnd rescue next
         env.tx.delete_key(k).commit
         s.each { |sk, v| s.delete({k, v}) if sk == k }
       when 61..70
-        v = s.map { |k, v| v }.sample rnd rescue next
+        v = s.map { |_, v| v }.sample rnd rescue next
         env.tx.delete_value(v).commit
         s.each { |k, sv| s.delete({k, v}) if sv == v }
       when 71..80
@@ -58,7 +58,7 @@ describe Ph do
         s.delete({k, v})
         s << {nk, nv}
       end
-      Log.debug { "s:\n" + s.map { |k, v| " " * 37 + "[#{k.hexstring}, #{v.hexstring}]" }.sort.join '\n' }
+      # Log.debug { "s:\n" + s.map { |k, v| " " * 37 + "[#{k.hexstring}, #{v.hexstring}]" }.sort.join '\n' }
       env.check_integrity
       s.each do |k, v|
         (env.has? k, v).should eq true
@@ -67,5 +67,16 @@ describe Ph do
         r.each { |ekv| ekv[0] == k && s.includes? ekv }
       end
     end
+    renv = Ph::Env.from_yaml conf
+    renv.uk.should eq env.uk
+    renv.uv.should eq env.uv
+    renv.unk.should eq env.unk
+    renv.unv.should eq env.unv
+    renv.ik.should eq env.ik
+    renv.iv.should eq env.iv
+    renv.dK.should eq env.dK
+    renv.dV.should eq env.dV
+    renv.dk.should eq env.dk
+    renv.dv.should eq env.dv
   end
 end
