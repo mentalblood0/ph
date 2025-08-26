@@ -32,7 +32,7 @@ describe Ph do
     ks = 16..16
     vs = 16..16
     1000.times do
-      case rnd.rand 1..80
+      case rnd.rand 1..100
       when 1..50
         k = rnd.random_bytes rnd.rand ks
         v = rnd.random_bytes rnd.rand vs
