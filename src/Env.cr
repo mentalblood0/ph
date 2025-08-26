@@ -81,6 +81,8 @@ module Ph
           buf.write_byte OpT::DELETE_KEY.value
           Ph.write buf, k
 
+          @env.dK << k
+
           @env.unk[k].each do |v, kvs|
             @env.unv[v].delete k
             kvs.each do |kv|
@@ -99,6 +101,8 @@ module Ph
           buf.write_byte OpT::DELETE_VALUE.value
           Ph.write buf, v
 
+          @env.dV << v
+
           @env.unv[v].each do |k, kvs|
             @env.unk[k].delete v
             kvs.each do |kv|
@@ -113,6 +117,12 @@ module Ph
         when { {K, V}, Nil }
           k, v = op[0].as {K, V}
           ::Log.debug { "commit delete\n" + " " * 37 + "[#{k.hexstring}, #{v.hexstring}]" }
+
+          @env.dk[k] = Set(V).new unless @env.dk.has_key? k
+          @env.dk[k] << v
+
+          @env.dv[v] = Set(K).new unless @env.dv.has_key? v
+          @env.dv[v] << k
 
           buf.write_byte OpT::DELETE_KEY_VALUE.value
           Ph.write buf, k, v
@@ -215,30 +225,8 @@ module Ph
     getter iv = Hash(V, Set(K)).new
     getter dK = Set(K).new
     getter dV = Set(V).new
-    getter dk = Hash(K, Set(V)?).new
-    getter dv = Hash(V, Set(K)?).new
-
-    # Q: How to register the last delete?
-    # delete [k, *]
-    # insert [k, v]
-    # insert [a, b]
-    # delete [k, v]
-    # A: use dK and dV for [k, *] and [*, v] deletes registration
-    #
-    # Q: How to register the last delete?
-    # delete [k, *]
-    # insert [k, v]
-    # delete [k, *]
-    # A: it is registered by deregistration of insert
-    #
-    # How to distinguish
-    # delete [k, *]
-    # insert [k, v]
-    # from
-    # insert [k, v]
-    # delete [k, *]
-    # ?
-    # A: delete-insert will preserve inserted data in ik/iv, so when checkpointing do delete first and insert next
+    getter dk = Hash(K, Set(V)).new
+    getter dv = Hash(V, Set(K)).new
 
     def after_initialize
     end
