@@ -58,7 +58,7 @@ describe Ph do
         s.delete({k, v})
         s << {nk, nv}
       end
-      Log.debug { "s:\n" + s.map { |k, v| "#{k.hexstring}, #{v.hexstring}" }.join '\n' }
+      Log.debug { "s:\n" + s.map { |k, v| "[#{k.hexstring}, #{v.hexstring}]" }.sort.join '\n' }
       env.check_integrity
       s.each do |k, v|
         (env.has? k, v).should eq true

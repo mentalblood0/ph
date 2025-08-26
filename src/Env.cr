@@ -76,15 +76,17 @@ module Ph
         case op
         when {K, Nil}
           k = op[0].as K
-          ::Log.debug { "commit delete {#{k.hexstring}, *}" }
+          ::Log.debug { "commit delete [#{k.hexstring}, *]" }
 
           buf.write_byte OpT::DELETE_KEY.value
           Ph.write buf, k
 
-          @env.unk[k].as(Hash(V, {K, V})).each do |v, kv|
+          @env.unk[k].each do |v, kvs|
             @env.unv[v].delete k
-            @env.uk[kv[0]].not_nil!.delete kv[1] rescue nil
-            @env.uv[kv[1]].not_nil!.delete kv[0] rescue nil
+            kvs.each do |kv|
+              @env.uk[kv[0]].not_nil!.delete kv[1] rescue nil
+              @env.uv[kv[1]].not_nil!.delete kv[0] rescue nil
+            end
           end rescue nil
           @env.unk.delete k
 
@@ -92,24 +94,25 @@ module Ph
           @env.ik.delete k
         when {Nil, V}
           v = op[1].as V
-          ::Log.debug { "commit delete {*, #{v.hexstring}}" }
+          ::Log.debug { "commit delete [*, #{v.hexstring}]" }
 
           buf.write_byte OpT::DELETE_VALUE.value
           Ph.write buf, v
 
-          @env.unv[v].as(Hash(K, {K, V})).each do |k, kv|
+          @env.unv[v].each do |k, kvs|
             @env.unk[k].delete v
-            @env.uk[kv[0]].not_nil!.delete kv[1] rescue nil
-            @env.uv[kv[1]].not_nil!.delete kv[0] rescue nil
+            kvs.each do |kv|
+              @env.uk[kv[0]].not_nil!.delete kv[1] rescue nil
+              @env.uv[kv[1]].not_nil!.delete kv[0] rescue nil
+            end
           end rescue nil
           @env.unv.delete v
 
           @env.iv.each { |k| @env.ik.delete k }
           @env.iv.delete v
         when { {K, V}, Nil }
-          k = (op[0].as {K, V})[0]
-          v = (op[0].as {K, V})[1]
-          ::Log.debug { "commit delete {#{k.hexstring}, #{v.hexstring}}" }
+          k, v = op[0].as {K, V}
+          ::Log.debug { "commit delete [#{k.hexstring}, #{v.hexstring}]" }
 
           buf.write_byte OpT::DELETE_KEY_VALUE.value
           Ph.write buf, k, v
@@ -120,23 +123,22 @@ module Ph
           @env.uv[v].not_nil![k] = nil
 
           if (@env.unk.has_key? k) && (@env.unk[k].has_key? v)
-            ok, ov = @env.unk[k][v]
+            @env.unk[k][v].each do |ok, ov|
+              @env.uk[ok] = Hash(V, {K, V}?).new unless @env.uk.has_key? ok
+              @env.uk[ok].not_nil![ov] = nil
+              @env.unk[k].not_nil!.delete v rescue nil
 
-            @env.uk[ok] = Hash(V, {K, V}?).new unless @env.uk.has_key? ok
-            @env.uk[ok].not_nil![ov] = nil
-            @env.unk[k].not_nil!.delete v rescue nil
-
-            @env.uv[ov] = Hash(K, {K, V}?).new unless @env.uv.has_key? ov
-            @env.uv[ov].not_nil![ok] = nil
-            @env.unv[v].not_nil!.delete k rescue nil
+              @env.uv[ov] = Hash(K, {K, V}?).new unless @env.uv.has_key? ov
+              @env.uv[ov].not_nil![ok] = nil
+              @env.unv[v].not_nil!.delete k rescue nil
+            end
           end
 
           @env.iv[v].delete k rescue nil
           @env.ik[k].delete v rescue nil
         when {K, V}
-          k = op[0].as K
-          v = op[1].as V
-          ::Log.debug { "commit insert {#{k.hexstring}, #{v.hexstring}}" }
+          k, v = op[0].as(K), op[1].as(V)
+          ::Log.debug { "commit insert [#{k.hexstring}, #{v.hexstring}]" }
 
           buf.write_byte OpT::INSERT.value
           Ph.write buf, k, v
@@ -147,11 +149,9 @@ module Ph
           @env.iv[v] = Set(K).new unless @env.iv.has_key? v
           @env.iv[v] << k
         when { {K, V}, {K, V} }
-          k = (op[0].as {K, V})[0]
-          v = (op[0].as {K, V})[1]
-          nk = (op[1].as {K, V})[0]
-          nv = (op[1].as {K, V})[1]
-          ::Log.debug { "commit update {#{k.hexstring}, #{v.hexstring}} -> {#{nk.hexstring}, #{nv.hexstring}}" }
+          k, v = op[0].as {K, V}
+          nk, nv = op[1].as {K, V}
+          ::Log.debug { "commit update [#{k.hexstring}, #{v.hexstring}] -> [#{nk.hexstring}, #{nv.hexstring}]" }
 
           buf.write_byte OpT::UPDATE.value
           Ph.write buf, k, v
@@ -163,24 +163,23 @@ module Ph
           @env.uv[v] = Hash(K, {K, V}?).new unless @env.uv.has_key? v
           @env.uv[v].not_nil![k] = {nk, nv}
 
-          @env.unk[nk] = Hash(V, {K, V}).new unless @env.uk.has_key? nk
-          @env.unk[nk].not_nil![nv] = {k, v}
+          @env.unk[nk] = Hash(V, Set({K, V})).new unless @env.unk.has_key? nk
+          @env.unk[nk].not_nil![nv] = Set({K, V}).new unless @env.unk[nk].has_key? nv
+          @env.unk[nk].not_nil![nv] << {k, v}
 
-          @env.unv[nv] = Hash(K, {K, V}).new unless @env.uv.has_key? nv
-          @env.unv[nv].not_nil![nk] = {k, v}
+          @env.unv[nv] = Hash(K, Set({K, V})).new unless @env.unv.has_key? nv
+          @env.unv[nv].not_nil![nk] = Set({K, V}).new unless @env.unv[nv].has_key? nk
+          @env.unv[nv].not_nil![nk] << {k, v}
 
           if (@env.unk.has_key? k) && (@env.unk[k].has_key? v)
-            ok = @env.unk[k][v][0]
-            ov = @env.unk[k][v][1]
-
+            @env.unk[k][v].each do |ok, ov|
+              @env.uk[ok].not_nil![ov] = {nk, nv}
+              @env.uv[ov].not_nil![ok] = {nk, nv}
+              @env.unk[nk][nv] << {ok, ov}
+              @env.unv[nv][nk] << {ok, ov}
+            end
             @env.unk[k].delete v
             @env.unv[v].delete k
-
-            @env.uk[ok] = Hash(V, {K, V}?).new unless @env.uk.has_key? ok
-            @env.uk[ok].not_nil![ov] = {k, v}
-
-            @env.uv[ov] = Hash(K, {K, V}?).new unless @env.uv.has_key? ov
-            @env.uv[ov].not_nil![ok] = {k, v}
           end
 
           if (@env.ik.has_key? k) && (@env.ik[k].includes? v)
@@ -247,10 +246,9 @@ module Ph
         vkv.each do |v, nkv|
           @uv[v].not_nil![k].should eq nkv
           if nkv
-            nk = nkv[0]
-            nv = nkv[1]
-            @unk[nk][nv].should eq({k, v})
-            @unv[nv][nk].should eq({k, v})
+            nk, nv = nkv
+            @unk[nk][nv].includes?({k, v}).should eq true
+            @unv[nv][nk].includes?({k, v}).should eq true
           end
         end
       end
