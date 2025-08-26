@@ -76,7 +76,7 @@ module Ph
         case op
         when {K, Nil}
           k = op[0].as K
-          ::Log.debug { "commit delete [#{k.hexstring}, *]" }
+          ::Log.debug { "commit delete\n" + " " * 37 + "[#{k.hexstring}, *]" }
 
           buf.write_byte OpT::DELETE_KEY.value
           Ph.write buf, k
@@ -84,8 +84,8 @@ module Ph
           @env.unk[k].each do |v, kvs|
             @env.unv[v].delete k
             kvs.each do |kv|
-              @env.uk[kv[0]].not_nil!.delete kv[1] rescue nil
-              @env.uv[kv[1]].not_nil!.delete kv[0] rescue nil
+              @env.uk[kv[0]].not_nil!.delete kv[1]
+              @env.uv[kv[1]].not_nil!.delete kv[0]
             end
           end rescue nil
           @env.unk.delete k
@@ -94,7 +94,7 @@ module Ph
           @env.ik.delete k
         when {Nil, V}
           v = op[1].as V
-          ::Log.debug { "commit delete [*, #{v.hexstring}]" }
+          ::Log.debug { "commit delete\n" + " " * 37 + "[*, #{v.hexstring}]" }
 
           buf.write_byte OpT::DELETE_VALUE.value
           Ph.write buf, v
@@ -102,8 +102,8 @@ module Ph
           @env.unv[v].each do |k, kvs|
             @env.unk[k].delete v
             kvs.each do |kv|
-              @env.uk[kv[0]].not_nil!.delete kv[1] rescue nil
-              @env.uv[kv[1]].not_nil!.delete kv[0] rescue nil
+              @env.uk[kv[0]].not_nil!.delete kv[1]
+              @env.uv[kv[1]].not_nil!.delete kv[0]
             end
           end rescue nil
           @env.unv.delete v
@@ -112,7 +112,7 @@ module Ph
           @env.iv.delete v
         when { {K, V}, Nil }
           k, v = op[0].as {K, V}
-          ::Log.debug { "commit delete [#{k.hexstring}, #{v.hexstring}]" }
+          ::Log.debug { "commit delete\n" + " " * 37 + "[#{k.hexstring}, #{v.hexstring}]" }
 
           buf.write_byte OpT::DELETE_KEY_VALUE.value
           Ph.write buf, k, v
@@ -138,7 +138,7 @@ module Ph
           @env.ik[k].delete v rescue nil
         when {K, V}
           k, v = op[0].as(K), op[1].as(V)
-          ::Log.debug { "commit insert [#{k.hexstring}, #{v.hexstring}]" }
+          ::Log.debug { "commit insert\n" + " " * 37 + "[#{k.hexstring}, #{v.hexstring}]" }
 
           buf.write_byte OpT::INSERT.value
           Ph.write buf, k, v
@@ -151,7 +151,7 @@ module Ph
         when { {K, V}, {K, V} }
           k, v = op[0].as {K, V}
           nk, nv = op[1].as {K, V}
-          ::Log.debug { "commit update [#{k.hexstring}, #{v.hexstring}] -> [#{nk.hexstring}, #{nv.hexstring}]" }
+          ::Log.debug { "commit update\n" + " " * 37 + "[#{k.hexstring}, #{v.hexstring}] ->\n" + " " * 37 + "[#{nk.hexstring}, #{nv.hexstring}]" }
 
           buf.write_byte OpT::UPDATE.value
           Ph.write buf, k, v
@@ -183,11 +183,11 @@ module Ph
           end
 
           if (@env.ik.has_key? k) && (@env.ik[k].includes? v)
-            @env.ik[k].delete v rescue nil
-            @env.ik[k] << nv rescue nil
+            @env.ik[k].delete v
+            @env.ik[k] << nv
 
-            @env.iv[v].delete k rescue nil
-            @env.iv[v] << nk rescue nil
+            @env.iv[v].delete k
+            @env.iv[v] << nk
           end
         else
           raise "can not commit #{op} of type #{typeof(op)}"
@@ -205,12 +205,12 @@ module Ph
 
     getter log : Log
 
-    getter uk : Hash(K, Hash(V, {K, V}?)?) = Hash(K, Hash(V, {K, V}?)?).new
-    getter uv : Hash(V, Hash(K, {K, V}?)?) = Hash(V, Hash(K, {K, V}?)?).new
-    getter unk : Hash(K, Hash(V, Set({K, V}))) = Hash(K, Hash(V, Set({K, V}))).new
-    getter unv : Hash(V, Hash(K, Set({K, V}))) = Hash(V, Hash(K, Set({K, V}))).new
-    getter ik : Hash(K, Set(V)) = Hash(K, Set(V)).new
-    getter iv : Hash(V, Set(K)) = Hash(V, Set(K)).new
+    getter uk = Hash(K, Hash(V, {K, V}?)?).new
+    getter uv = Hash(V, Hash(K, {K, V}?)?).new
+    getter unk = Hash(K, Hash(V, Set({K, V}))).new
+    getter unv = Hash(V, Hash(K, Set({K, V}))).new
+    getter ik = Hash(K, Set(V)).new
+    getter iv = Hash(V, Set(K)).new
 
     def after_initialize
     end
@@ -252,6 +252,7 @@ module Ph
           end
         end
       end
+      @ik.each { |k, vs| vs.each { |v| (@iv[v]? && @iv[v].includes? k).should eq true } }
     end
   end
 end
