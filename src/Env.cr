@@ -147,8 +147,12 @@ module Ph
       Tx.new self
     end
 
-    def get(k : K) : Set(V)
+    def get_values(k : K) : Set(V)
       return @ik[k] rescue Set(V).new
+    end
+
+    def get_keys(v : V) : Set(K)
+      return @iv[v] rescue Set(K).new
     end
 
     def has?(k : K, v : V) : Bool

@@ -55,9 +55,14 @@ describe Ph do
       env.check_integrity
       s.each do |k, v|
         (env.has? k, v).should eq true
-        r = env.get k
-        (r.includes? v).should eq true
-        r.each { |ekv| ekv[0] == k && s.includes? ekv }
+
+        rvs = env.get_values k
+        (rvs.includes? v).should eq true
+        rvs.each { |ekv| ekv[0] == k && s.includes? ekv }
+
+        rks = env.get_keys v
+        (rks.includes? k).should eq true
+        rks.each { |ekv| ekv[0] == v && s.includes? ekv }
       end
     end
     renv = Ph::Env.from_yaml conf
