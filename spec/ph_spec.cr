@@ -24,6 +24,22 @@ describe Ph do
     # delete confp["sst"]["path"].as_s
   end
 
+  it "writes/reads log" do
+    env = Ph::Env.from_yaml conf
+    log = env.log
+    k = rnd.random_bytes 16
+    v = rnd.random_bytes 16
+
+    ops = [{k, nil},
+           {nil, v},
+           { {k, v}, nil },
+           {k, v}] of Ph::Op
+    log.write ops
+
+    log.f.rewind
+    log.read.should eq ops
+  end
+
   it "generative test" do
     env = Ph::Env.from_yaml conf
 
@@ -51,7 +67,6 @@ describe Ph do
         env.tx.delete(k, v).commit
         s.delete({k, v})
       end
-      # Log.debug { "s:\n" + s.map { |k, v| " " * 37 + "[#{k.hexstring}, #{v.hexstring}]" }.sort.join '\n' }
       env.check_integrity
       s.each do |k, v|
         (env.has? k, v).should eq true
