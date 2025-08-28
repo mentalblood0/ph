@@ -8,7 +8,7 @@ env = Ph::Env.from_yaml env_text
 conf_text = File.read "benchmark.yml"
 conf = NamedTuple(amount: UInt64, key_size: UInt64, value_size: UInt64).from_yaml conf_text
 
-kv = Set(Ph::KV).new Array(Ph::KV).new conf[:amount] { {Random::DEFAULT.random_bytes(16), Random::DEFAULT.random_bytes(32)} }
+kv = Set(Ph::KV).new Array(Ph::KV).new conf[:amount] { {Random::DEFAULT.random_bytes(conf[:key_size]), Random::DEFAULT.random_bytes(conf[:value_size])} }
 
 tw = Time.measure do
   kv.each { |k, v| env.tx.insert(k, v).commit }
