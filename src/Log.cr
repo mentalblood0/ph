@@ -24,70 +24,50 @@ module Ph
       @br = BitReader.new File.open path, "r"
     end
 
-    protected def write(io : IO, opt : OpT, k : Bytes)
-      raise "too big" if k.size > 2 ** 15 - 1
-
-      s = k.size.to_u32
-      ss = (32 - s.leading_zeros_count).to_u32
-
-      rr = (opt.value.to_u32 << (32 - 2)) |
-           (ss << (32 - 6)) |
-           (s << (32 - 6 - ss))
-
-      r = Bytes.new 4
-      IO::ByteFormat::BigEndian.encode rr, r
-
-      rrs = (2 + 4 + ss - 1) // 8
-      ::Log.debug { "Log.write #{opt} #{k.hexstring} (size is 0b#{k.size.to_s 2}) header: " + r[..rrs].map { |b| (b.to_s 2).rjust 8, '0' }.join ' ' }
-      io.write r[..rrs]
-
-      io.write k
-    end
-
-    protected def write(io : IO, opt : OpT, k : Bytes, v : Bytes)
-      raise "too big" if k.size > 2 ** 15 - 1
-      raise "too big" if v.size > 2 ** 15 - 1
-
-      ::Log.debug { "Log.write #{opt} #{k.hexstring} #{v.hexstring}" }
-
-      ks = k.size.to_u64
-      kss = (64 - ks.leading_zeros_count).to_u64
-
-      vs = v.size.to_u64
-      vss = (64 - vs.leading_zeros_count).to_u64
-
-      rr = (opt.value.to_u64 << (64 - 2)) |
-           (kss << (64 - 6)) |
-           (ks << (64 - 6 - kss)) |
-           (vss << (64 - 6 - kss - 4)) |
-           (vs << (64 - 6 - kss - 4 - vss))
-
-      r = Bytes.new 8
-      IO::ByteFormat::BigEndian.encode rr, r
-
-      rrs = (2 + 4 + kss + 4 + vss - 1) // 8
-      io.write r[..rrs]
-
-      io.write k
-      io.write v
+    protected def write_size(bw : BitWriter, b : Bytes)
+      s = b.size.to_u64
+      ss = 64_u64 - s.leading_zeros_count
+      bw.write_bits ss, 4
+      bw.write_bits s, ss
     end
 
     def write(ops : Array(Op))
       buf = IO::Memory.new
+      bw = BitWriter.new buf
       ops.each do |op|
         case op
         when {K, Nil}
+          bw.write_bits OpT::DELETE_KEY.value.to_u64, 2
           k = op[0].as K
-          write buf, OpT::DELETE_KEY, k
+
+          write_size bw, k
+
+          bw.write_bytes k
         when {Nil, V}
+          bw.write_bits OpT::DELETE_VALUE.value.to_u64, 2
           v = op[1].as V
-          write buf, OpT::DELETE_VALUE, v
+
+          write_size bw, v
+
+          bw.write_bytes v
         when { {K, V}, Nil }
+          bw.write_bits OpT::DELETE_KEY_VALUE.value.to_u64, 2
           k, v = op[0].as {K, V}
-          write buf, OpT::DELETE_KEY_VALUE, k, v
+
+          write_size bw, k
+          write_size bw, v
+
+          bw.write_bytes k
+          bw.write_bytes v
         when {K, V}
+          bw.write_bits OpT::INSERT.value.to_u64, 2
           k, v = op[0].as(K), op[1].as(V)
-          write buf, OpT::INSERT, k, v
+
+          write_size bw, k
+          write_size bw, v
+
+          bw.write_bytes k
+          bw.write_bytes v
         else
           raise "can not commit #{op} of type #{typeof(op)}"
         end
