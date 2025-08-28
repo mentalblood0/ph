@@ -47,7 +47,7 @@ module Ph
     end
   end
 
-  class BitWriter
+  struct BitWriter
     getter io : IO
     getter b : UInt8 = 0
     getter bs : UInt8 = 0

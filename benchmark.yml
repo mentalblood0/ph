@@ -1,3 +1,4 @@
 amount: 10_000
 key_size: 16
 value_size: 32
+seed: 0
