@@ -59,6 +59,18 @@ module Ph
       insert [{k, v}]
     end
 
+    def update(u : Hash({K, V}, {K, V}))
+      u.each do |o, n|
+        delete o
+        insert n
+      end
+    end
+
+    def update(o : {K, V}, n : {K, V})
+      delete o
+      insert n
+    end
+
     def commit
       @env.log.write @ops
       @ops.each { |op| @env.register op }
