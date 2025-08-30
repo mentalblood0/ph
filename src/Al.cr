@@ -24,9 +24,9 @@ module Ph
     end
 
     protected def as_block(f : UInt64)
-      r = Bytes.new @s
-      0.upto(@s - 1) { |i| r[@s - 1 - i] = (pointerof(f).as(Pointer(UInt8)) + (8 - i)).value }
-      r
+      r = Bytes.new 8
+      IO::ByteFormat::BigEndian.encode f, r
+      r[8 - s..]
     end
 
     def get(i : UInt64)
@@ -46,10 +46,10 @@ module Ph
       h = read
       if h.all? { |b| b == 255 }
         @io.seek 0, IO::Seek::End
-        r = @io.pos.to_u64!
+        r = @io.pos.to_u64! // @s
         @io.write b
 
-        r // @s
+        r
       else
         r = as_free h
         n1 = get r
@@ -57,16 +57,14 @@ module Ph
         set r, b
         set 0, n1
 
-        r // @s
+        r
       end
     end
 
     def delete(i : UInt64)
       ::Log.debug { "Al.delete #{i}" }
 
-      h = get 0
-
-      set i, h
+      set i, get 0
       set 0, as_block i
     end
   end

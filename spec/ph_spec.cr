@@ -4,8 +4,6 @@ require "spec"
 require "../src/Env.cr"
 require "../src/Al.cr"
 
-Log.setup :debug
-
 def delete(path : String)
   Dir.glob("#{path}/**/*") do |file|
     File.delete(file) unless Dir.exists?(file)
@@ -18,16 +16,14 @@ end
 
 rnd = Random.new 2
 
-describe Ph::Al, focus: true do
-  Log.debug { "debug" }
-
-  s = 1_u8
+describe Ph::Al do
+  s = 5_u8
   io = IO::Memory.new
   al = Ph::Al.new io, s
 
   l = Hash(UInt64, Bytes).new
 
-  100.times do
+  10000.times do
     case rnd.rand 0..1
     when 0
       b = rnd.random_bytes s
