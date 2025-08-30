@@ -2,6 +2,9 @@ require "log"
 require "spec"
 
 require "../src/Env.cr"
+require "../src/Al.cr"
+
+Log.setup :debug
 
 def delete(path : String)
   Dir.glob("#{path}/**/*") do |file|
@@ -14,6 +17,31 @@ def delete(path : String)
 end
 
 rnd = Random.new 2
+
+describe Ph::Al, focus: true do
+  Log.debug { "debug" }
+
+  s = 1_u8
+  io = IO::Memory.new
+  al = Ph::Al.new io, s
+
+  l = Hash(UInt64, Bytes).new
+
+  100.times do
+    case rnd.rand 0..1
+    when 0
+      b = rnd.random_bytes s
+      l[al.add b] = b
+    when 1
+      k = l.keys.sample rnd rescue next
+      al.delete k
+      l.delete k
+    end
+    Log.debug { io.to_slice.hexstring }
+    Log.debug { "{" + (l.map { |i, b| "#{i}: #{b.hexstring}" }.join ' ') + "}" }
+    l.each { |i, b| (al.get i).should eq b }
+  end
+end
 
 describe Ph do
   conf = File.read "env.yml"
