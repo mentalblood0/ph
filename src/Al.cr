@@ -24,9 +24,9 @@ module Ph
     end
 
     protected def as_block(f : UInt64)
-      r = Bytes.new 8
-      IO::ByteFormat::BigEndian.encode f, r
-      r[8 - s..]
+      r = Bytes.new Math.max 8, @s
+      IO::ByteFormat::BigEndian.encode f, r[(Math.max 8, @s) - 8..]
+      (@s >= 8) ? r : r[8 - @s..]
     end
 
     def get(i : UInt64)

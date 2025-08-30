@@ -16,26 +16,29 @@ end
 
 rnd = Random.new 2
 
-describe Ph::Al do
-  s = 5_u8
-  io = IO::Memory.new
-  al = Ph::Al.new io, s
+describe Ph::Al, focus: true do
+  [2, 3, 5, 9].map { |s| s.to_u8! }.each do |s|
+    it "supports #{s} bytes blocks" do
+      io = IO::Memory.new
+      al = Ph::Al.new io, s
 
-  l = Hash(UInt64, Bytes).new
+      l = Hash(UInt64, Bytes).new
 
-  10000.times do
-    case rnd.rand 0..1
-    when 0
-      b = rnd.random_bytes s
-      l[al.add b] = b
-    when 1
-      k = l.keys.sample rnd rescue next
-      al.delete k
-      l.delete k
+      1000.times do
+        case rnd.rand 0..1
+        when 0
+          b = rnd.random_bytes s
+          l[al.add b] = b
+        when 1
+          k = l.keys.sample rnd rescue next
+          al.delete k
+          l.delete k
+        end
+        Log.debug { io.to_slice.hexstring }
+        Log.debug { "{" + (l.map { |i, b| "#{i}: #{b.hexstring}" }.join ' ') + "}" }
+        l.each { |i, b| (al.get i).should eq b }
+      end
     end
-    Log.debug { io.to_slice.hexstring }
-    Log.debug { "{" + (l.map { |i, b| "#{i}: #{b.hexstring}" }.join ' ') + "}" }
-    l.each { |i, b| (al.get i).should eq b }
   end
 end
 
