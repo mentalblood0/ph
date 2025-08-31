@@ -3,6 +3,19 @@ module Ph
   alias V = Bytes
   alias KV = Tuple(K, V)
 
+  module IOConverter
+    alias Fa = NamedTuple(
+      filename: Path | String,
+      mode: String,
+      perm: File::Permissions)
+
+    def self.from_yaml(ctx : YAML::ParseContext, node : YAML::Nodes::Node) : IO::Memory | File
+      return File.new **Fa.new ctx, node rescue nil
+      node.raise "Expected #{Fa} or String of value \"memory\", not #{node.kind}" unless ((String.new ctx, node) == "memory" rescue false)
+      IO::Memory.new
+    end
+  end
+
   class BitReader
     getter io : IO
     getter b : UInt8 = 0

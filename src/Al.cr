@@ -1,11 +1,17 @@
+require "yaml"
+
 require "./common.cr"
 
 module Ph
   class Al
-    getter io : IO
+    include YAML::Serializable
+    include YAML::Serializable::Strict
+
+    @[YAML::Field(converter: Ph::IOConverter)]
+    getter io : IO::Memory | File
     getter s : UInt8
 
-    def initialize(@io, @s)
+    def after_initialize
       @io.pos = 0
       return unless read.all? { |b| b == 255 } rescue nil
       io.write Bytes.new @s.to_i32!, 255

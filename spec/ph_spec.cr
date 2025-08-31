@@ -16,11 +16,18 @@ end
 
 rnd = Random.new 2
 
-describe Ph::Al, focus: true do
+describe Ph::Al do
   [2, 3, 5, 9].map { |s| s.to_u8! }.each do |s|
     it "supports #{s} bytes blocks" do
-      io = IO::Memory.new
-      al = Ph::Al.new io, s
+      al = Ph::Al.from_yaml <<-YAML
+        io:
+          filename: /tmp/ph/log
+          mode: w+
+          perm:
+          - OwnerAll
+          - GroupRead
+        s: #{s}
+      YAML
 
       l = Hash(UInt64, Bytes).new
 
@@ -34,7 +41,6 @@ describe Ph::Al, focus: true do
           al.delete k
           l.delete k
         end
-        Log.debug { io.to_slice.hexstring }
         Log.debug { "{" + (l.map { |i, b| "#{i}: #{b.hexstring}" }.join ' ') + "}" }
         l.each { |i, b| (al.get i).should eq b }
       end
