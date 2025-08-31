@@ -34,7 +34,7 @@ describe Ph::Al do
       l = Hash(UInt64, Bytes).new
 
       1000.times do
-        case rnd.rand 0..1
+        case rnd.rand 0..2
         when 0
           b = rnd.random_bytes s
           l[al.add b] = b
@@ -42,6 +42,11 @@ describe Ph::Al do
           k = l.keys.sample rnd rescue next
           al.delete k
           l.delete k
+        when 2
+          k = l.keys.sample rnd rescue next
+          b = rnd.random_bytes s
+          al.replace k, b
+          l[k] = b
         end
         Log.debug { "{" + (l.map { |i, b| "#{i}: #{b.hexstring}" }.join ' ') + "}" }
         l.each { |i, b| (al.get i).should eq b }
@@ -55,7 +60,7 @@ describe Ph do
   confp = YAML.parse conf
 
   Spec.before_each do
-    File.delete? confp["log"]["io"]["file"]["filename"].as_s
+    File.delete? confp["log"]["io"]["file"]["filename"].as_s rescue nil
     # delete confp["sst"]["path"].as_s
   end
 

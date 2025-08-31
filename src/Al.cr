@@ -73,5 +73,11 @@ module Ph
       set i, get 0
       set 0, as_block i
     end
+
+    def replace(i : UInt64, b : Bytes)
+      ::Log.debug { "Al.replace #{i} #{b.hexstring}" }
+
+      set i, b
+    end
   end
 end
