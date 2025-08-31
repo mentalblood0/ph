@@ -10,13 +10,6 @@ module Ph
     @[YAML::Field(converter: Ph::IOConverter)]
     getter io : IO::Memory | File
 
-    @[YAML::Field(ignore: true)]
-    @br = BitReader.new File.new File::NULL, "r"
-
-    def after_initialize
-      @br = BitReader.new @io
-    end
-
     protected def write_size(bw : BitWriter, b : Bytes)
       s = b.size.to_u64
       ss = 64_u64 - s.leading_zeros_count
@@ -71,28 +64,29 @@ module Ph
 
     def read(&)
       @io.pos = 0
+      br = BitReader.new @io
       loop do
-        optv = @br.read_bits 2 rescue break
+        optv = br.read_bits 2 rescue break
         case opt = OpT.new optv.to_u8
         when OpT::DELETE_KEY
-          ks = @br.read_bits @br.read_bits 4
-          k = @br.read_bytes ks
+          ks = br.read_bits br.read_bits 4
+          k = br.read_bytes ks
           yield({k, nil})
         when OpT::DELETE_VALUE
-          vs = @br.read_bits @br.read_bits 4
-          v = @br.read_bytes vs
+          vs = br.read_bits br.read_bits 4
+          v = br.read_bytes vs
           yield({nil, v})
         when OpT::DELETE_KEY_VALUE
-          ks = @br.read_bits @br.read_bits 4
-          vs = @br.read_bits @br.read_bits 4
-          k = @br.read_bytes ks
-          v = @br.read_bytes vs
+          ks = br.read_bits br.read_bits 4
+          vs = br.read_bits br.read_bits 4
+          k = br.read_bytes ks
+          v = br.read_bytes vs
           yield({ {k, v}, nil })
         when OpT::INSERT
-          ks = @br.read_bits @br.read_bits 4
-          vs = @br.read_bits @br.read_bits 4
-          k = @br.read_bytes ks
-          v = @br.read_bytes vs
+          ks = br.read_bits br.read_bits 4
+          vs = br.read_bits br.read_bits 4
+          k = br.read_bytes ks
+          v = br.read_bytes vs
           yield({k, v})
         else
           raise "can not read operation of type #{opt}"
