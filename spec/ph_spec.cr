@@ -21,11 +21,13 @@ describe Ph::Al do
     it "supports #{s} bytes blocks" do
       al = Ph::Al.from_yaml <<-YAML
         io:
-          filename: /tmp/ph/log
-          mode: w+
-          perm:
-          - OwnerAll
-          - GroupRead
+          file:
+            filename: /tmp/ph/log
+            mode: w+
+            perm:
+            - OwnerAll
+            - GroupRead
+          sync: true
         s: #{s}
       YAML
 
@@ -53,7 +55,7 @@ describe Ph do
   confp = YAML.parse conf
 
   Spec.before_each do
-    File.delete? confp["log"]["path"].as_s
+    File.delete? confp["log"]["io"]["file"]["filename"].as_s
     # delete confp["sst"]["path"].as_s
   end
 
@@ -69,7 +71,7 @@ describe Ph do
            {k, v}] of Ph::Op
     log.write ops
 
-    log.f.rewind
+    log.io.rewind
     log.read.should eq ops
   end
 

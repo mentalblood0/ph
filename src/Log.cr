@@ -1,4 +1,3 @@
-require "math"
 require "yaml"
 
 require "./common.cr"
@@ -8,20 +7,14 @@ module Ph
     include YAML::Serializable
     include YAML::Serializable::Strict
 
-    getter path : Path
-
-    @[YAML::Field(ignore: true)]
-    getter f = File.new File::NULL, "a"
+    @[YAML::Field(converter: Ph::IOConverter)]
+    getter io : IO::Memory | File
 
     @[YAML::Field(ignore: true)]
     @br = BitReader.new File.new File::NULL, "r"
 
     def after_initialize
-      Dir.mkdir_p @path.parent
-      @f = File.open path, "a"
-      @f.sync = true
-
-      @br = BitReader.new File.open path, "r"
+      @br = BitReader.new @io
     end
 
     protected def write_size(bw : BitWriter, b : Bytes)
@@ -73,37 +66,36 @@ module Ph
         end
       end
       ::Log.debug { "dump transaction to log: #{buf.to_slice.map { |b| (b.to_s 2).rjust 8, '0' }.join ' '}" }
-      @f.write buf.to_slice
+      @io.write buf.to_slice
     end
 
     def read(&)
-      File.open @f.path do |f|
-        loop do
-          optv = @br.read_bits 2 rescue break
-          case opt = OpT.new optv.to_u8
-          when OpT::DELETE_KEY
-            ks = @br.read_bits @br.read_bits 4
-            k = @br.read_bytes ks
-            yield({k, nil})
-          when OpT::DELETE_VALUE
-            vs = @br.read_bits @br.read_bits 4
-            v = @br.read_bytes vs
-            yield({nil, v})
-          when OpT::DELETE_KEY_VALUE
-            ks = @br.read_bits @br.read_bits 4
-            vs = @br.read_bits @br.read_bits 4
-            k = @br.read_bytes ks
-            v = @br.read_bytes vs
-            yield({ {k, v}, nil })
-          when OpT::INSERT
-            ks = @br.read_bits @br.read_bits 4
-            vs = @br.read_bits @br.read_bits 4
-            k = @br.read_bytes ks
-            v = @br.read_bytes vs
-            yield({k, v})
-          else
-            raise "can not read operation of type #{opt}"
-          end
+      @io.pos = 0
+      loop do
+        optv = @br.read_bits 2 rescue break
+        case opt = OpT.new optv.to_u8
+        when OpT::DELETE_KEY
+          ks = @br.read_bits @br.read_bits 4
+          k = @br.read_bytes ks
+          yield({k, nil})
+        when OpT::DELETE_VALUE
+          vs = @br.read_bits @br.read_bits 4
+          v = @br.read_bytes vs
+          yield({nil, v})
+        when OpT::DELETE_KEY_VALUE
+          ks = @br.read_bits @br.read_bits 4
+          vs = @br.read_bits @br.read_bits 4
+          k = @br.read_bytes ks
+          v = @br.read_bytes vs
+          yield({ {k, v}, nil })
+        when OpT::INSERT
+          ks = @br.read_bits @br.read_bits 4
+          vs = @br.read_bits @br.read_bits 4
+          k = @br.read_bytes ks
+          v = @br.read_bytes vs
+          yield({k, v})
+        else
+          raise "can not read operation of type #{opt}"
         end
       end
     end
@@ -115,7 +107,7 @@ module Ph
     end
 
     def truncate
-      @f.truncate
+      @io.truncate
     end
   end
 end
