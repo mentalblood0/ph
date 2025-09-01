@@ -3,6 +3,7 @@ require "spec"
 
 require "../src/Env.cr"
 require "../src/Al.cr"
+require "../src/Bt.cr"
 
 def delete(path : String)
   Dir.glob("#{path}/**/*") do |file|
@@ -16,21 +17,33 @@ end
 
 rnd = Random.new 2
 
+describe Ph::Bt, focus: true do
+  [2].map { |s| s.to_u8! }.each do |s|
+    it "supports #{s} bytes blocks" do
+      io = IO::Memory.new
+      bt = Ph::Bt.new io, s, ->(b : Bytes) { b }
+      d = IO::Memory.new
+      l = Hash(Bytes, UInt64).new
+
+      10.times do
+        case rnd.rand 0..0
+        when 0
+          b = rnd.random_bytes s
+          bt.add b
+          p = d.size.to_u64!
+          d.write b
+          l[b] = p
+        end
+        Log.debug { io.to_slice.hexstring }
+      end
+    end
+  end
+end
+
 describe Ph::Al do
   [2, 3, 5, 9].map { |s| s.to_u8! }.each do |s|
     it "supports #{s} bytes blocks" do
-      al = Ph::Al.from_yaml <<-YAML
-        io:
-          file:
-            filename: /tmp/ph/log
-            mode: w+
-            perm:
-            - OwnerAll
-            - GroupRead
-          sync: true
-        s: #{s}
-      YAML
-
+      al = Ph::Al.new IO::Memory.new, s
       l = Hash(UInt64, Bytes).new
 
       1000.times do
