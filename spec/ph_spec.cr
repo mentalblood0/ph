@@ -5,6 +5,8 @@ require "../src/Env.cr"
 require "../src/Al.cr"
 require "../src/Bt.cr"
 
+Log.setup :debug
+
 def delete(path : String)
   Dir.glob("#{path}/**/*") do |file|
     File.delete(file) unless Dir.exists?(file)
@@ -34,7 +36,8 @@ describe Ph::Bt, focus: true do
           d.write b
           l[b] = p
         end
-        Log.debug { io.to_slice.hexstring }
+        iob = io.to_slice
+        Log.debug { io.to_slice.hexstring.scan(/.{1,#{s * 2}}/).map(&.[0]).join ' ' }
       end
     end
   end

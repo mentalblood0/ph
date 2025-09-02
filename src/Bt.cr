@@ -44,30 +44,8 @@ module Ph
        r: (decodep b[(2 * @s)..(3 * @s - 1)])}
     end
 
-    # 1    BST-Insert(T, z)
-    # 2      y := NIL
-    # 3      x := T.root
-    # 4      while x ≠ NIL do
-    # 5        y := x
-    # 6        if z.key < x.key then
-    # 7          x := x.left
-    # 8        else
-    # 9          x := x.right
-    # 10       end if
-    # 11     repeat
-    # 12     z.parent := y
-    # 13     if y = NIL then
-    # 14       T.root := z
-    # 15     else if z.key < y.key then
-    # 16       y.left := z
-    # 17     else
-    # 18       y.right := z
-    # 19     end if
-
     def add(b : Bytes)
       ::Log.debug { "Bt.add #{b.hexstring}" }
-
-      r = al.add encode({c: b, l: NIL, r: NIL})
 
       y : Node? = nil
       i = 1_u64
@@ -75,9 +53,13 @@ module Ph
 
       while x
         y = x
-        x = (decoden al.get (kf.call b) < (kf.call x[:c]) ? x[:l] : x[:r] rescue nil)
+        it = (kf.call b) < (kf.call x[:c]) ? x[:l] : x[:r]
+        break if it == 2 ** (8 * @s) - 1
+        x = decoden al.get it rescue break
+        i = it
       end
 
+      r = al.add encode({c: b, l: NIL, r: NIL})
       if y
         al.replace i, encode (kf.call b) < (kf.call y[:c]) ? {c: y[:c], l: r, r: y[:r]} : {c: y[:c], l: y[:l], r: r}
       end
