@@ -20,7 +20,7 @@ end
 rnd = Random.new 2
 
 describe Ph::Bt, focus: true do
-  [2].map { |s| s.to_u8! }.each do |s|
+  [2, 3, 5, 8].map { |s| s.to_u8! }.each do |s|
     it "supports #{s} bytes blocks" do
       io = IO::Memory.new
       h = Hash(Bytes, Bytes).new
@@ -30,7 +30,7 @@ describe Ph::Bt, focus: true do
         case rnd.rand 0..0
         when 0
           k = rnd.random_bytes s
-          v = rnd.random_bytes s
+          v = rnd.random_bytes 16
           h[k] = v
           bt.add k
         end

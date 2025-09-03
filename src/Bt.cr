@@ -8,9 +8,73 @@ module Ph
     include YAML::Serializable
     include YAML::Serializable::Strict
 
-    alias P = UInt64
-    NIL = UInt64::MAX
-    alias Node = {k: Bytes, l: P, r: P}
+    class Node
+      alias P = UInt64
+      NIL = UInt64::MAX
+
+      getter bt : Bt
+
+      getter p : P { @bt.al.add @raw.not_nil! }
+      getter raw : Bytes { @bt.al.get @p.not_nil! }
+      getter k : Bytes { raw[(0 * @bt.s)..(1 * @bt.s - 1)] }
+      getter l : P? { decode raw[(1 * @bt.s)..(2 * @bt.s - 1)] }
+      getter r : P? { decode raw[(2 * @bt.s)..(3 * @bt.s - 1)] }
+
+      def initialize(@bt, @p : P)
+        @raw = @bt.al.get @p.not_nil!
+      end
+
+      def initialize(@bt, @raw)
+      end
+
+      def initialize(@bt, @k, @l, @r)
+        @raw = @k.not_nil! + (encode @l) + (encode @r)
+      end
+
+      def k=(@k : Bytes)
+        raw[(0 * @bt.s)..(1 * @bt.s - 1)].copy_from @k
+      end
+
+      def l=(@l : P?)
+        lb = @l ? encode @l : Bytes.new @bt.s.to_i32!, 255
+        raw[(1 * @bt.s)..(2 * @bt.s - 1)].copy_from lb
+      end
+
+      def r=(@r : P?)
+        rb = @r ? encode @r : Bytes.new @bt.s.to_i32!, 255
+        raw[(2 * @bt.s)..(3 * @bt.s - 1)].copy_from rb
+      end
+
+      def left : Node?
+        return Node.new @bt, @l if @l
+      end
+
+      def right : Node?
+        return Node.new @bt, @r if @r
+      end
+
+      def add
+        @p = @bt.al.add @raw.not_nil!
+      end
+
+      def update
+        @bt.al.replace p, @raw.not_nil!
+      end
+
+      protected def decode(b : Bytes) : P?
+        return nil if b.all? { |b| b == 255 }
+        r = 0_u64
+        b.each { |b| r = (r << 8) + b }
+        r
+      end
+
+      protected def encode(p : P?) : Bytes
+        return Bytes.new (Math.max 8, bt.s.to_i32!), 255 unless p
+        r = Bytes.new Math.max 8, bt.s
+        IO::ByteFormat::BigEndian.encode p, r[(Math.max 8, bt.s) - 8..]
+        (bt.s >= 8) ? r : r[8 - bt.s..]
+      end
+    end
 
     @[YAML::Field(converter: Ph::IOConverter)]
     getter io : IO::Memory | File
@@ -22,47 +86,27 @@ module Ph
     def initialize(@io, @s, @vf)
     end
 
-    protected def encode(f : P) : Bytes
-      r = Bytes.new Math.max 8, @s
-      IO::ByteFormat::BigEndian.encode f, r[(Math.max 8, @s) - 8..]
-      (@s >= 8) ? r : r[8 - @s..]
-    end
-
-    protected def decodep(b : Bytes) : P
-      r = 0_u64
-      b.each { |b| r = (r << 8) + b }
-      r
-    end
-
-    protected def encode(n : Node) : Bytes
-      n[:k] + (encode n[:l]) + (encode n[:r])
-    end
-
-    protected def decoden(b : Bytes) : Node
-      {k: b[(0 * @s)..(1 * @s - 1)],
-       l: (decodep b[(1 * @s)..(2 * @s - 1)]),
-       r: (decodep b[(2 * @s)..(3 * @s - 1)])}
+    def root
+      Node.new self, 1_u64 rescue nil
     end
 
     def add(k : Bytes)
       ::Log.debug { "Bt.add #{k.hexstring}" }
 
       y : Node? = nil
-      i = 1_u64
-      x = (decoden al.get i rescue nil)
+      x = root
 
       v = vf.call k
       while x
         y = x
-        it = v < (vf.call x[:k]) ? x[:l] : x[:r]
-        break if it == 2 ** (8 * @s) - 1
-        x = decoden al.get it rescue break
-        i = it
+        x = v < (vf.call x.k) ? x.left : x.right
       end
 
-      r = al.add encode({k: k, l: NIL, r: NIL})
+      r = Node.new self, k, nil, nil
+      r.add
       if y
-        al.replace i, encode v < (vf.call y[:k]) ? {k: y[:k], l: r, r: y[:r]} : {k: y[:k], l: y[:l], r: r}
+        v < (vf.call y.k) ? y.l = r.p : y.r = r.p
+        y.update
       end
 
       r
@@ -71,17 +115,16 @@ module Ph
     def get(v : Bytes)
       ::Log.debug { "Bt.get #{v.hexstring}" }
 
-      i = 1_u64
-      while x = (decoden al.get i rescue nil)
-        case v <=> vf.call x[:k]
+      x = root
+      while x
+        case v <=> vf.call x.k
         when .< 0
-          i = x[:l]
+          x = x.left
         when .> 0
-          i = x[:r]
+          x = x.right
         when 0
-          return x[:k]
+          return x.k
         end
-        break if i == 2 ** (8 * @s) - 1
       end
     end
   end
