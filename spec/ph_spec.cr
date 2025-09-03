@@ -23,21 +23,19 @@ describe Ph::Bt, focus: true do
   [2].map { |s| s.to_u8! }.each do |s|
     it "supports #{s} bytes blocks" do
       io = IO::Memory.new
-      bt = Ph::Bt.new io, s, ->(b : Bytes) { b }
-      d = IO::Memory.new
-      l = Hash(Bytes, UInt64).new
+      h = Hash(Bytes, Bytes).new
+      bt = Ph::Bt.new io, s, ->(k : Bytes) { h[k] }
 
       10.times do
         case rnd.rand 0..0
         when 0
-          b = rnd.random_bytes s
-          bt.add b
-          p = d.size.to_u64!
-          d.write b
-          l[b] = p
+          k = rnd.random_bytes s
+          v = rnd.random_bytes s
+          h[k] = v
+          bt.add k
         end
-        iob = io.to_slice
-        Log.debug { io.to_slice.hexstring.scan(/.{1,#{s * 2}}/).map(&.[0]).join ' ' }
+        Log.debug { io.to_slice.hexstring.scan(/.{1,#{s * 2 * 3}}/).map(&.[0].scan(/.{1,#{s * 2}}/).join ' ').join "   " }
+        h.each { |k, v| (bt.get v).should eq k }
       end
     end
   end

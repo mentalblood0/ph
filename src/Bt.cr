@@ -10,16 +10,16 @@ module Ph
 
     alias P = UInt64
     NIL = UInt64::MAX
-    alias Node = {c: Bytes, l: P, r: P}
+    alias Node = {k: Bytes, l: P, r: P}
 
     @[YAML::Field(converter: Ph::IOConverter)]
     getter io : IO::Memory | File
     getter s : UInt8
-    getter kf : Proc(Bytes, Bytes) = Proc(Bytes, Bytes).new { |b| b }
+    getter vf : Proc(Bytes, Bytes) = Proc(Bytes, Bytes).new { |b| b }
 
     getter al : Al { Al.new @io, @s * 3 }
 
-    def initialize(@io, @s, @kf)
+    def initialize(@io, @s, @vf)
     end
 
     protected def encode(f : P) : Bytes
@@ -35,36 +35,54 @@ module Ph
     end
 
     protected def encode(n : Node) : Bytes
-      n[:c] + (encode n[:l]) + (encode n[:r])
+      n[:k] + (encode n[:l]) + (encode n[:r])
     end
 
     protected def decoden(b : Bytes) : Node
-      {c: b[(0 * @s)..(1 * @s - 1)],
+      {k: b[(0 * @s)..(1 * @s - 1)],
        l: (decodep b[(1 * @s)..(2 * @s - 1)]),
        r: (decodep b[(2 * @s)..(3 * @s - 1)])}
     end
 
-    def add(b : Bytes)
-      ::Log.debug { "Bt.add #{b.hexstring}" }
+    def add(k : Bytes)
+      ::Log.debug { "Bt.add #{k.hexstring}" }
 
       y : Node? = nil
       i = 1_u64
       x = (decoden al.get i rescue nil)
 
+      v = vf.call k
       while x
         y = x
-        it = (kf.call b) < (kf.call x[:c]) ? x[:l] : x[:r]
+        it = v < (vf.call x[:k]) ? x[:l] : x[:r]
         break if it == 2 ** (8 * @s) - 1
         x = decoden al.get it rescue break
         i = it
       end
 
-      r = al.add encode({c: b, l: NIL, r: NIL})
+      r = al.add encode({k: k, l: NIL, r: NIL})
       if y
-        al.replace i, encode (kf.call b) < (kf.call y[:c]) ? {c: y[:c], l: r, r: y[:r]} : {c: y[:c], l: y[:l], r: r}
+        al.replace i, encode v < (vf.call y[:k]) ? {k: y[:k], l: r, r: y[:r]} : {k: y[:k], l: y[:l], r: r}
       end
 
       r
+    end
+
+    def get(v : Bytes)
+      ::Log.debug { "Bt.get #{v.hexstring}" }
+
+      i = 1_u64
+      while x = (decoden al.get i rescue nil)
+        case v <=> vf.call x[:k]
+        when .< 0
+          i = x[:l]
+        when .> 0
+          i = x[:r]
+        when 0
+          return x[:k]
+        end
+        break if i == 2 ** (8 * @s) - 1
+      end
     end
   end
 end
