@@ -27,12 +27,16 @@ describe Ph::Bt, focus: true do
       bt = Ph::Bt.new io, s, ->(k : Bytes) { h[k] }
 
       10.times do
-        case rnd.rand 0..0
+        case rnd.rand 0..1
         when 0
           k = rnd.random_bytes s
           v = rnd.random_bytes 16
           h[k] = v
           bt.add k
+        when 1
+          k = h.keys.sample rnd rescue next
+          bt.delete h[k]
+          h.delete k
         end
         Log.debug { io.to_slice.hexstring.scan(/.{1,#{s * 2 * 3}}/).map(&.[0].scan(/.{1,#{s * 2}}/).join ' ').join "   " }
         h.each { |k, v| (bt.get v).should eq k }

@@ -19,6 +19,7 @@ module Ph
       getter k : Bytes { raw[(0 * @bt.s)..(1 * @bt.s - 1)] }
       getter l : P? { decode raw[(1 * @bt.s)..(2 * @bt.s - 1)] }
       getter r : P? { decode raw[(2 * @bt.s)..(3 * @bt.s - 1)] }
+      getter v : Bytes { @bt.vf.call k }
 
       def initialize(@bt, @p : P)
         @raw = @bt.al.get @p.not_nil!
@@ -32,7 +33,8 @@ module Ph
       end
 
       def k=(@k : Bytes)
-        raw[(0 * @bt.s)..(1 * @bt.s - 1)].copy_from @k
+        raw[(0 * @bt.s)..(1 * @bt.s - 1)].copy_from @k.not_nil!
+        v = @bt.vf.call @k.not_nil!
       end
 
       def l=(@l : P?)
@@ -51,6 +53,40 @@ module Ph
 
       def right : Node?
         return Node.new @bt, r if r
+      end
+
+      def left=(n : Node?)
+        c = left
+        if n
+          if c
+            c.k = n.k
+            c.l = n.l
+            c.r = n.r
+            c.update
+          else
+            l = n.add
+          end
+        elsif c
+          @bt.al.delete c.p
+          l = nil
+        end
+      end
+
+      def right=(n : Node?)
+        c = right
+        if n
+          if c
+            c.k = n.k
+            c.l = n.l
+            c.r = n.r
+            c.update
+          else
+            r = n.add
+          end
+        elsif c
+          @bt.al.delete c.p
+          r = nil
+        end
       end
 
       def add
@@ -134,6 +170,49 @@ module Ph
           return x.k
         end
       end
+    end
+
+    def delete(v : Bytes)
+      ::Log.debug { "Bt.delete #{v.hexstring}" }
+
+      return unless (r = root)
+      if (rn = delete root, v)
+        r.l = rn.l
+        r.r = rn.r
+      end
+    end
+
+    private def delete(r : Node?, v : Bytes) : Node?
+      return nil unless r
+
+      c = r.not_nil!
+
+      case v <=> c.v
+      when .< 0
+        c.left = delete c.left, v
+      when .> 0
+        c.right = delete c.right, v
+      when 0
+        if !c.left
+          return c.right
+        elsif !c.right
+          return c.left
+        else
+          s = find_min c.right.not_nil!
+          c.k = s.k
+          c.right = delete c.right.not_nil!, s.v
+        end
+      end
+
+      c
+    end
+
+    private def find_min(n : Node) : Node
+      c = n
+      while c.left
+        c = c.left.not_nil!
+      end
+      c
     end
   end
 end
