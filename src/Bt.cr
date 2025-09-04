@@ -46,11 +46,11 @@ module Ph
       end
 
       def left : Node?
-        return Node.new @bt, @l if @l
+        return Node.new @bt, l if l
       end
 
       def right : Node?
-        return Node.new @bt, @r if @r
+        return Node.new @bt, r if r
       end
 
       def add
@@ -69,7 +69,7 @@ module Ph
       end
 
       protected def encode(p : P?) : Bytes
-        return Bytes.new (Math.max 8, bt.s.to_i32!), 255 unless p
+        return Bytes.new bt.s.to_i32!, 255 unless p
         r = Bytes.new Math.max 8, bt.s
         IO::ByteFormat::BigEndian.encode p, r[(Math.max 8, bt.s) - 8..]
         (bt.s >= 8) ? r : r[8 - bt.s..]
@@ -99,7 +99,14 @@ module Ph
       v = vf.call k
       while x
         y = x
-        x = v < (vf.call x.k) ? x.left : x.right
+        x = case v <=> vf.call x.k
+            when .< 0
+              x.left
+            when .> 0
+              x.right
+            when 0
+              return x
+            end
       end
 
       r = Node.new self, k, nil, nil
@@ -117,7 +124,8 @@ module Ph
 
       x = root
       while x
-        case v <=> vf.call x.k
+        xv = vf.call x.k
+        case v <=> xv
         when .< 0
           x = x.left
         when .> 0
