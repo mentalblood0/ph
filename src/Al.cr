@@ -71,11 +71,25 @@ module Ph
       end
     end
 
+    protected def size
+      (@io.is_a? File) ? @io.as(File).size : @io.as(IO::Memory).size
+    end
+
     def delete(i : UInt64)
       ::Log.debug { "Al.delete #{i}" }
 
-      set i, get 0
-      set 0, as_b i
+      if size > 2 * @s
+        set i, get 0
+        set 0, as_b i
+      else
+        case @io
+        when File
+          @io.as(File).truncate @s.to_i32!
+        when IO::Memory
+          @io.as(IO::Memory).clear
+          @io.write Bytes.new @s.to_i32!, 255
+        end
+      end
     end
 
     def replace(i : UInt64, b : Bytes)
