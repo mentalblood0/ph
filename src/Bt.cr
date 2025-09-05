@@ -16,9 +16,9 @@ module Ph
 
       getter p : P { @bt.al.add @raw.not_nil! }
       getter raw : Bytes { @bt.al.get @p.not_nil! }
-      getter k : Bytes { raw[(0 * @bt.s)..(1 * @bt.s - 1)] }
-      getter l : P? { decode raw[(1 * @bt.s)..(2 * @bt.s - 1)] }
-      getter r : P? { decode raw[(2 * @bt.s)..(3 * @bt.s - 1)] }
+      getter k : Bytes { raw[0..(@bt.s - 1)] }
+      getter l : P? { decode raw[@bt.s..(@bt.s + @bt.ps - 1)] }
+      getter r : P? { decode raw[(@bt.s + @bt.ps)..(@bt.s + 2 * @bt.ps - 1)] }
       getter v : Bytes { @bt.vf.call k }
 
       def initialize(@bt, @p : P)
@@ -33,18 +33,18 @@ module Ph
       end
 
       def k=(@k : Bytes)
-        raw[(0 * @bt.s)..(1 * @bt.s - 1)].copy_from @k.not_nil!
+        raw[0..(@bt.s - 1)].copy_from @k.not_nil!
         v = @bt.vf.call @k.not_nil!
       end
 
       def l=(@l : P?)
-        lb = @l ? encode @l : Bytes.new @bt.s.to_i32!, 255
-        raw[(1 * @bt.s)..(2 * @bt.s - 1)].copy_from lb
+        lb = @l ? encode @l : Bytes.new @bt.ps.to_i32!, 255
+        raw[@bt.s..(@bt.s + @bt.ps - 1)].copy_from lb
       end
 
       def r=(@r : P?)
-        rb = @r ? encode @r : Bytes.new @bt.s.to_i32!, 255
-        raw[(2 * @bt.s)..(3 * @bt.s - 1)].copy_from rb
+        rb = @r ? encode @r : Bytes.new @bt.ps.to_i32!, 255
+        raw[(@bt.s + @bt.ps)..(@bt.s + 2 * @bt.ps - 1)].copy_from rb
       end
 
       def left : Node?
@@ -105,21 +105,20 @@ module Ph
       end
 
       protected def encode(p : P?) : Bytes
-        return Bytes.new bt.s.to_i32!, 255 unless p
-        r = Bytes.new Math.max 8, bt.s
-        IO::ByteFormat::BigEndian.encode p, r[(Math.max 8, bt.s) - 8..]
-        (bt.s >= 8) ? r : r[8 - bt.s..]
+        return Bytes.new bt.ps.to_i32!, 255 unless p
+        r = Bytes.new Math.max 8, bt.ps
+        IO::ByteFormat::BigEndian.encode p, r[(Math.max 8, bt.ps) - 8..]
+        (bt.ps >= 8) ? r : r[8 - bt.ps..]
       end
     end
 
-    @[YAML::Field(converter: Ph::IOConverter)]
-    getter io : IO::Memory | File
-    getter s : UInt8
     getter vf : Proc(Bytes, Bytes) = Proc(Bytes, Bytes).new { |b| b }
 
-    getter al : Al { Al.new @io, @s * 3 }
+    getter s : UInt8
+    getter ps : UInt8
+    getter al : Al
 
-    def initialize(@io, @s, @vf)
+    def initialize(@s, @ps, @al, @vf)
     end
 
     def root
@@ -172,47 +171,93 @@ module Ph
       end
     end
 
-    def delete(v : Bytes)
-      ::Log.debug { "Bt.delete #{v.hexstring}" }
+    def delete(v : Bytes) : Bool
+      return false unless root
 
-      return unless (r = root)
-      if (rn = delete root, v)
-        r.l = rn.l
-        r.r = rn.r
-      end
-    end
+      # Find the node to delete and its parent
+      c = root
+      p : Node? = nil
+      l = false
 
-    private def delete(r : Node?, v : Bytes) : Node?
-      return nil unless r
-
-      c = r.not_nil!
-
-      case v <=> c.v
-      when .< 0
-        c.left = delete c.left, v
-      when .> 0
-        c.right = delete c.right, v
-      when 0
-        if !c.left
-          return c.right
-        elsif !c.right
-          return c.left
+      # Search for the node
+      while c && c.v != v
+        p = c
+        if v < c.v
+          c = c.left
+          l = true
         else
-          s = find_min c.right.not_nil!
-          c.k = s.k
-          c.right = delete c.right.not_nil!, s.v
+          c = c.right
+          l = false
         end
       end
 
-      c
+      # Node not found
+      return false unless c
+
+      # Handle deletion based on number of children
+      case {!c.left.nil?, !c.right.nil?}
+      when {false, false}
+        # Case 1: Leaf node
+        dl p, l
+      when {true, false}, {false, true}
+        # Case 2: One child
+        d1c c, p, l
+      else
+        # Case 3: Two children
+        d2c c
+      end
+
+      true
     end
 
-    private def find_min(n : Node) : Node
-      c = n
-      while c.left
-        c = c.left.not_nil!
+    private def dl(p : Node?, l : Bool)
+      if p.nil?
+        r = root
+        @al.delete r.p if r # Deleting the root
+      elsif l
+        p.not_nil!.left = nil
+      else
+        p.not_nil!.right = nil
       end
-      c
+    end
+
+    private def d1c(n : Node, p : Node?, l : Bool)
+      c = (n.left || n.right).not_nil!
+      if p.nil?
+        r = root.not_nil!
+        r.k = c.k
+        r.l = c.l
+        r.r = c.r
+        r.update
+      elsif l
+        p.not_nil!.left = c
+      else
+        p.not_nil!.right = c
+      end
+    end
+
+    private def d2c(n : Node)
+      # Find inorder successor (leftmost node in right subtree)
+      sp = n
+      s = n.right.not_nil!
+      sl = false
+
+      # Traverse to find the smallest node in right subtree
+      while !s.left.nil?
+        sp = s
+        s = s.left.not_nil!
+        sl = true
+      end
+
+      # Copy successor value to current node
+      n.k = s.k
+
+      # Remove the successor (which has at most one right child)
+      if sl
+        sp.not_nil!.left = s.right
+      else
+        sp.not_nil!.right = s.right
+      end
     end
   end
 end

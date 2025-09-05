@@ -24,7 +24,7 @@ describe Ph::Bt, focus: true do
     it "supports #{s} bytes blocks" do
       io = IO::Memory.new
       h = Hash(Bytes, Bytes).new
-      bt = Ph::Bt.new io, s, ->(k : Bytes) { h[k] }
+      bt = Ph::Bt.new s, s, (Ph::Al.new io, s * 3), ->(k : Bytes) { h[k] }
 
       10.times do
         case rnd.rand 0..1
