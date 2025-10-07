@@ -9,16 +9,10 @@ module Ph
 
     getter dss : UInt8
     getter ps : UInt8
-    getter buckets : Array(UInt64)
 
     getter hs : UInt64 { @dss + @ps }
 
-    def initialize(@dss, @ps, @buckets)
-      after_initialize
-    end
-
-    def after_initialize
-      @buckets.sort!.reverse!
+    def initialize(@dss, @ps)
     end
 
     def split(n : UInt64)
@@ -27,7 +21,9 @@ module Ph
 
       used = Array(Array(UInt64)).new(n + 1) { [] of UInt64 }
 
-      @buckets.each_with_index do |b, _|
+      pow = (Math.log n, 2).ceil.to_i32
+      while pow >= 0
+        b = 1_u64 << pow
         (n).downto(0) do |c|
           next if dp[c] == UInt64::MAX
 
@@ -49,6 +45,7 @@ module Ph
             end
           end
         end
+        pow -= 1
       end
 
       used[n]

@@ -21,9 +21,8 @@ end
 rnd = Random.new 2
 
 describe Ph::Sds, focus: true do
-  b = [32, 16, 8, 4, 2, 1].map &.to_u64
-  sds = Ph::Sds.new 4_u8, 5_u8, b
-  (1_u64..b.sum).each do |s|
+  sds = Ph::Sds.new 4_u8, 5_u8
+  (1_u64..63).each do |s|
     r = sds.split s
     c = sds.body_cost r
     o = c - s
