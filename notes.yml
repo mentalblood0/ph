@@ -4,11 +4,9 @@ splitting data storage:
     sst:
     - header pointer: 5
     header:
-    - data size: 2
-    - blocks pointers pointer: 5
+    - data size: 4
+    - blocks pointers pointer or block pointer if only one: 5
     blocks pointers:
-      1:
-      - block pointer 1: 5
       2:
       - block pointer 1: 5
       - block pointer 2: 5
@@ -27,7 +25,7 @@ splitting data storage:
       sst:
       - header pointer: 5
       header:
-      - data size: 2
+      - data size: 4
       - blocks pointers pointer: 5
       blocks pointers:
       - 2: 10
@@ -36,4 +34,4 @@ splitting data storage:
         - data: 8
         16:
         - data: 16
-    total size: 46
+    total size: 48

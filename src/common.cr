@@ -3,6 +3,13 @@ module Ph
   alias V = Bytes
   alias KV = Tuple(K, V)
 
+  macro mserializable
+    include YAML::Serializable
+    include YAML::Serializable::Strict
+    include JSON::Serializable
+    include JSON::Serializable::Strict
+  end
+
   module IOConverter
     alias Args = NamedTuple(
       file: NamedTuple(

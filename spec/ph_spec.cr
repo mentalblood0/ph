@@ -4,6 +4,7 @@ require "spec"
 require "../src/Env.cr"
 require "../src/Al.cr"
 require "../src/Bt.cr"
+require "../src/Sds.cr"
 
 Log.setup :debug
 
@@ -19,7 +20,18 @@ end
 
 rnd = Random.new 2
 
-describe Ph::Bt, focus: true do
+describe Ph::Sds, focus: true do
+  b = [32, 16, 8, 4, 2, 1].map &.to_u64
+  sds = Ph::Sds.new 4_u8, 5_u8, b
+  (1_u64..b.sum).each do |s|
+    r = sds.split s
+    c = sds.body_cost r
+    o = c - s
+    puts "#{s.to_s.rjust 6} #{c.to_s.ljust 6} #{o.to_s.ljust 6} #{r}"
+  end
+end
+
+describe Ph::Bt do
   [2, 3, 5, 8].map { |s| s.to_u8! }.each do |s|
     it "supports #{s} bytes blocks" do
       io = IO::Memory.new
