@@ -56,6 +56,8 @@ module Ph
       end
 
       def left=(n : Node?)
+        ::Log.debug { "#{k.hexstring}.left = #{n ? n.k.hexstring : n}" }
+
         c = left
         if n
           if c
@@ -73,6 +75,8 @@ module Ph
       end
 
       def right=(n : Node?)
+        ::Log.debug { "#{k.hexstring}.right = #{n ? n.k.hexstring : n}" }
+
         c = right
         if n
           if c
@@ -172,6 +176,8 @@ module Ph
     end
 
     def delete(v : Bytes) : Bool
+      ::Log.debug { "Bt.delete #{v.hexstring}" }
+
       return false unless root
 
       # Find the node to delete and its parent
@@ -211,6 +217,8 @@ module Ph
     end
 
     private def dl(p : Node?, l : Bool)
+      ::Log.debug { "Bt.dl #{p ? p.k.hexstring : p}" }
+
       if p.nil?
         r = root
         @al.delete r.p if r # Deleting the root
@@ -222,6 +230,8 @@ module Ph
     end
 
     private def d1c(n : Node, p : Node?, l : Bool)
+      ::Log.debug { "Bt.d1c #{n.k.hexstring} #{p ? p.k.hexstring : p}" }
+
       c = (n.left || n.right).not_nil!
       if p.nil?
         r = root.not_nil!
@@ -237,13 +247,15 @@ module Ph
     end
 
     private def d2c(n : Node)
+      ::Log.debug { "Bt.d2c #{n.k.hexstring}" }
+
       # Find inorder successor (leftmost node in right subtree)
       sp = n
       s = n.right.not_nil!
       sl = false
 
       # Traverse to find the smallest node in right subtree
-      while !s.left.nil?
+      while s.left
         sp = s
         s = s.left.not_nil!
         sl = true
