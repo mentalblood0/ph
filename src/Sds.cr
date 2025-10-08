@@ -19,7 +19,7 @@ module Ph
       fbi = n.trailing_zeros_count
       a = [(n.class.new 1) << fbi]
       asum = a[0]
-      (fbi + 1..63).each do |i|
+      (fbi + 1..n.bit_length).each do |i|
         if 1 == n.bit i
           b = (n.class.new 1) << i
           if a.size * @pointer_size >= b - asum
