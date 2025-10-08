@@ -16,21 +16,19 @@ module Ph
     end
 
     def fast_split(n : UInt64)
-      c = [] of UInt64
-      (0..63).each do |i|
+      fbi = n.trailing_zeros_count
+      a = [1_u64 << fbi]
+      asum = a[0]
+      (fbi + 1..63).each do |i|
         if 1 == n.bit i
-          c << (1_u64 << i)
-        end
-      end
-      a = [c[0]]
-      asum = c[0]
-      c[1..].each do |b|
-        if @ps * a.size >= b - asum
-          a = [b * 2]
-          asum = b * 2
-        else
-          a << b
-          asum += b
+          b = 1_u64 << i
+          if @ps * a.size >= b - asum
+            a = [b * 2]
+            asum = b * 2
+          else
+            a << b
+            asum += b
+          end
         end
       end
       a
