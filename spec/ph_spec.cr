@@ -22,11 +22,11 @@ rnd = Random.new 2
 
 describe Ph::Sds, focus: true do
   sds = Ph::Sds.new 4_u8, 5_u8
-  (1_u64..63).each do |s|
-    r = sds.split s
-    c = sds.body_cost r
-    o = c - s
-    puts "#{s.to_s.rjust 6} #{c.to_s.ljust 6} #{o.to_s.ljust 6} #{r}"
+
+  (1_u64..1024).each do |n|
+    fs = sds.fast_split n
+    s = (sds.split n).reverse
+    fs.should eq s
   end
 end
 
