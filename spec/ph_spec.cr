@@ -24,10 +24,10 @@ describe Ph::Sds, focus: true do
   sds = Ph::Sds.new 4_u8, 5_u8
 
   it "splits correctly" do
-    (1_u64..1024).each do |n|
+    (1_u64..2**20).each do |n|
+      # (UInt64::MAX // 2 - 1024 * 10..UInt64::MAX // 2).each do |n|
       fs = sds.fast_split n
-      # s = (sds.split n).reverse
-      # fs.should eq s
+      (fs.sum >= n).should eq true
     end
   end
 end
