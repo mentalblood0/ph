@@ -15,13 +15,13 @@ module Ph
     def initialize(@data_size_size, @pointer_size)
     end
 
-    def fast_split(n : UInt64)
+    def fast_split(n)
       fbi = n.trailing_zeros_count
-      a = [1_u64 << fbi]
+      a = [(n.class.new 1) << fbi]
       asum = a[0]
       (fbi + 1..63).each do |i|
         if 1 == n.bit i
-          b = 1_u64 << i
+          b = (n.class.new 1) << i
           if a.size * @pointer_size >= b - asum
             a = [b * 2]
             asum = b * 2
